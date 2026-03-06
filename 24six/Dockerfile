@@ -8,15 +8,16 @@ WORKDIR /app
 
 # ── Frontend: install deps + build ─────────────────────────────────────────
 COPY frontend/package.json ./frontend/
-RUN cd frontend && npm install --legacy-peer-deps --no-optional
+RUN cd frontend && \
+    npm install --legacy-peer-deps && \
+    npm install @rollup/rollup-linux-x64-musl --save-optional --legacy-peer-deps || true
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
 # ── Backend: copy source first, then install deps ──────────────────────────
-# (Copy source BEFORE npm install so node_modules is never overwritten)
 COPY backend/ ./backend/
 RUN cd backend && \
-    npm install --production --no-optional && \
+    npm install --production && \
     node -e "require('node-fetch'); console.log('node-fetch OK')" && \
     node -e "require('express'); console.log('express OK')"
 
