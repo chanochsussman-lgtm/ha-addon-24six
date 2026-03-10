@@ -1,0 +1,42 @@
+name: "24Six"
+description: "24Six Jewish music streaming — browse, search, play and control WiiM speakers directly from Home Assistant."
+version: "1.3.0"
+slug: "twentyfour_six"
+url: "https://github.com/chanochsussman-lgtm/ha-addon-24six"
+
+init: false
+arch:
+  - aarch64
+  - amd64
+  - armhf
+  - armv7
+
+startup: application
+boot: auto
+
+# Ingress — serve the UI through HA's built-in proxy (no port forwarding needed)
+ingress: true
+ingress_port: 8484
+ingress_stream: false
+panel_icon: mdi:music-note
+panel_title: 24Six
+panel_admin: false
+
+# Needs the Supervisor token to call the HA API (media_player services, states)
+hassio_api: true
+homeassistant_api: true
+auth_api: false
+
+# No persistent storage needed — session secret written to /data
+map:
+  - data:rw
+
+# No options needed — credentials entered via the in-app login screen
+options: {}
+schema: {}
+
+# Port exposed for direct access (optional, ingress is preferred)
+ports:
+  8484/tcp: null
+ports_description:
+  8484/tcp: "Web UI (use Ingress instead)"
