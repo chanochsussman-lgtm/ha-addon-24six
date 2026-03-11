@@ -219,8 +219,13 @@ app.post('/api/setup/reset', (req, res) => {
 });
 
 // Debug - raw home data
-app.get('/api/debug/home', (req, res) => proxy(req, res, '/app/music'));
-app.get('/api/debug/banners', (req, res) => proxy(req, res, '/app/music/banner'));
+app.get('/api/debug/home',             (req, res) => proxy(req, res, '/app/music'));
+app.get('/api/debug/banners',          (req, res) => proxy(req, res, '/app/music/banner'));
+app.get('/api/debug/artist/:id',       (req, res) => proxy(req, res, `/app/music/artist/${req.params.id}`));
+app.get('/api/debug/collection/:id',   (req, res) => proxy(req, res, `/app/music/collection/${req.params.id}`));
+app.get('/api/debug/content/:id',      (req, res) => proxy(req, res, `/app/content/${req.params.id}`));
+app.get('/api/debug/playlist/:id',     (req, res) => proxy(req, res, `/app/music/playlist/${req.params.id}`));
+app.get('/api/debug/recent',           (req, res) => proxy(req, res, '/app/music/content/recent'));
 
 // Music API Routes ──────────────────────────────────────────────────────────
 app.get('/api/home',            (req, res) => proxy(req, res, '/app/music'));
