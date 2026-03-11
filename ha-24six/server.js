@@ -84,7 +84,7 @@ async function doLogin() {
     if (xsrf2) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf2.value);
 
     // Step 2: pin-check
-    await client.post(`${BASE_URL}/pin-check`, {
+    await client.post(`${BASE_URL}/profiles/pin-check`, {
       profile: CREDENTIALS.profile_id,
       pin: null
     }, { headers });
@@ -96,7 +96,7 @@ async function doLogin() {
     if (xsrf3) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf3.value);
 
     // Step 3: login
-    await client.post(`${BASE_URL}/login`, {}, { headers });
+    await client.post(`${BASE_URL}/profiles/login`, {}, { headers });
     console.log('[auth] Step 3 done');
 
     saveAuth();
@@ -115,7 +115,7 @@ async function ensureAuth() {
   }
   // Validate session
   try {
-    await client.get(`${BASE_URL}/profile`, {
+    await client.get(`${BASE_URL}/app/profile`, {
       headers: { 'Accept': 'application/json' }
     });
     console.log('[auth] Session valid');
@@ -183,35 +183,35 @@ app.post('/api/setup/reset', (req, res) => {
 });
 
 // ── Music API Routes ──────────────────────────────────────────────────────────
-app.get('/api/home', (req, res) => proxy(req, res, '/featured-homepage'));
-app.get('/api/banners', (req, res) => proxy(req, res, '/music/banner'));
-app.get('/api/browse/recent', (req, res) => proxy(req, res, '/music/content/recent'));
-app.get('/api/categories', (req, res) => proxy(req, res, '/music/category'));
-app.get('/api/categories/:id', (req, res) => proxy(req, res, `/music/category/${req.params.id}`));
-app.get('/api/artists', (req, res) => proxy(req, res, '/music/artist'));
-app.get('/api/artists/:id', (req, res) => proxy(req, res, `/music/artist/${req.params.id}`));
-app.get('/api/playlists', (req, res) => proxy(req, res, '/music/playlist'));
-app.get('/api/playlists/:id', (req, res) => proxy(req, res, `/music/playlist/${req.params.id}`));
-app.get('/api/stories', (req, res) => proxy(req, res, '/story'));
+app.get('/api/home', (req, res) => proxy(req, res, '/app/music/featured-homepage'));
+app.get('/api/banners', (req, res) => proxy(req, res, '/app/music/banner'));
+app.get('/api/browse/recent', (req, res) => proxy(req, res, '/app/music/content/recent'));
+app.get('/api/categories', (req, res) => proxy(req, res, '/app/music/category'));
+app.get('/api/categories/:id', (req, res) => proxy(req, res, `/app/music/category/${req.params.id}`));
+app.get('/api/artists', (req, res) => proxy(req, res, '/app/music/artist'));
+app.get('/api/artists/:id', (req, res) => proxy(req, res, `/app/music/artist/${req.params.id}`));
+app.get('/api/playlists', (req, res) => proxy(req, res, '/app/music/playlist'));
+app.get('/api/playlists/:id', (req, res) => proxy(req, res, `/app/music/playlist/${req.params.id}`));
+app.get('/api/stories', (req, res) => proxy(req, res, '/app/story'));
 
 // Collections
-app.get('/api/collections', (req, res) => proxy(req, res, '/music/collection'));
-app.get('/api/collections/:id', (req, res) => proxy(req, res, `/music/collection/${req.params.id}`));
+app.get('/api/collections', (req, res) => proxy(req, res, '/app/music/collection'));
+app.get('/api/collections/:id', (req, res) => proxy(req, res, `/app/music/collection/${req.params.id}`));
 app.get('/api/collections/:id/songs', (req, res) =>
-  proxy(req, res, '/music/content', { params: { collection_id: req.params.id } })
+  proxy(req, res, '/app/music/content', { params: { collection_id: req.params.id } })
 );
 
 // Search
 app.get('/api/search', async (req, res) => {
   const { q, type = 'collection' } = req.query;
   if (!q) return res.json([]);
-  proxy(req, res, `/music/${type}/search`, { params: { q } });
+  proxy(req, res, `/app/music/${type}/search`, { params: { q } });
 });
 
 // ── Audio Streaming ───────────────────────────────────────────────────────────
 app.get('/api/audio/:id', async (req, res) => {
   try {
-    const playUrl = `${BASE_URL}/content/${req.params.id}/play?format=aac`;
+    const playUrl = `${BASE_URL}/app/music/content/${req.params.id}/play?format=aac`;
     const redirect = await client.get(playUrl, {
       maxRedirects: 0,
       validateStatus: s => s === 302 || s === 200
@@ -242,7 +242,7 @@ app.get('/api/audio/:id', async (req, res) => {
 // Stream redirect
 app.get('/api/stream/:id', async (req, res) => {
   try {
-    const playUrl = `${BASE_URL}/content/${req.params.id}/play?format=aac`;
+    const playUrl = `${BASE_URL}/app/music/content/${req.params.id}/play?format=aac`;
     const redirect = await client.get(playUrl, {
       maxRedirects: 0,
       validateStatus: s => s === 302 || s === 200
