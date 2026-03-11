@@ -24,7 +24,7 @@ export default function PlaylistPage() {
   )
 
   const playlist = data?.playlist || data?.data || data
-  const songs = data?.songs || data?.content || playlist?.songs || playlist?.content || []
+  const songs = data?.songs || data?.content || data?.contents || playlist?.songs || playlist?.content || playlist?.contents || []
   const imgUrl = playlist?.img ? api.imgUrl(playlist.img) : null
 
   const toTrack = s => ({

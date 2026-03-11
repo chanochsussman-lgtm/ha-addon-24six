@@ -285,13 +285,42 @@ app.delete('/api/library/favorites/:id', async (req, res) => {
 // ── Audio Streaming ───────────────────────────────────────────────────────────
 app.get('/api/audio/:id', async (req, res) => {
   try {
-    const playUrl = `${BASE_URL}/app/content/${req.params.id}/play?format=aac`;
-    const redirect = await client.get(playUrl, {
-      maxRedirects: 0,
-      validateStatus: s => s === 302 || s === 200
-    });
+    // Try both URL patterns
+    const playUrls = [
+      `${BASE_URL}/app/content/${req.params.id}/play?format=aac`,
+      `${BASE_URL}/app/music/content/${req.params.id}/play?format=aac`,
+      `${BASE_URL}/content/${req.params.id}/play?format=aac`,
+    ];
 
-    const cdnUrl = redirect.headers?.location || playUrl;
+    let cdnUrl = null;
+    for (const playUrl of playUrls) {
+      try {
+        console.log('[audio] trying:', playUrl);
+        const redirect = await client.get(playUrl, {
+          maxRedirects: 0,
+          validateStatus: s => s >= 200 && s < 400
+        });
+        console.log('[audio] response status:', redirect.status, 'location:', redirect.headers?.location);
+        if (redirect.status === 302 && redirect.headers?.location) {
+          cdnUrl = redirect.headers.location;
+          break;
+        } else if (redirect.status === 200) {
+          // Maybe returns JSON with URL
+          const body = redirect.data;
+          const url = typeof body === 'object' ? (body?.url || body?.audio_url || body?.stream_url || body?.src) : null;
+          if (url) { cdnUrl = url; break; }
+        }
+      } catch (e) {
+        console.log('[audio] url failed:', playUrl, e.message);
+      }
+    }
+
+    if (!cdnUrl) {
+      console.error('[audio] no CDN URL found for id:', req.params.id);
+      return res.status(404).json({ error: 'No audio URL found' });
+    }
+
+    console.log('[audio] streaming from:', cdnUrl);
     const rangeHeader = req.headers.range;
     const headers = { 'Accept': '*/*' };
     if (rangeHeader) headers['Range'] = rangeHeader;

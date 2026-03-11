@@ -38,11 +38,14 @@ export default function Home() {
       api.banners().catch(() => []),
       api.recent().catch(() => []),
     ]).then(([home, ban, rec]) => {
+      console.log('[Home] top-level keys:', Object.keys(home || {}))
+      console.log('[Home] sample values:', Object.entries(home||{}).map(([k,v])=>`${k}:${Array.isArray(v)?`arr[${v.length}]`:typeof v}`).join(', '))
+      console.log('[Recent] type:', typeof rec, Array.isArray(rec) ? `arr[${rec.length}]` : Object.keys(rec||{}))
       setHomeData(home)
       // banners can be top-level or nested
       const banArr = Array.isArray(ban) ? ban : (ban?.banners || ban?.data || [])
       setBanners(banArr)
-      const recArr = Array.isArray(rec) ? rec : (rec?.content || rec?.data || [])
+      const recArr = Array.isArray(rec) ? rec : (rec?.content || rec?.contents || rec?.data || [])
       setRecent(recArr)
       setLoading(false)
     })
@@ -101,7 +104,7 @@ export default function Home() {
     },
     {
       title: 'Recently Listened',
-      items: normalizeItems(recent, 'collection'),
+      items: normalizeItems(recent.map(r => ({ ...r, type: r.type === 'content' ? 'song' : (r.type || 'song') })), 'song'),
     },
     {
       title: 'Browse Artists',
