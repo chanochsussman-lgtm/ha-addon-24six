@@ -53,29 +53,51 @@ function loadAuth() {
 async function doLogin() {
   console.log('[auth] Starting login flow...');
   try {
+    // Step 0: GET homepage to get CSRF token
+    const home = await client.get(`${BASE_URL}/`, {
+      headers: { 'Accept': 'text/html' }
+    });
+    
+    // Extract CSRF token from cookies or response
+    const cookies = await jar.getCookies(BASE_URL);
+    const xsrfCookie = cookies.find(c => c.key === 'XSRF-TOKEN');
+    const csrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.value) : null;
+    console.log('[auth] CSRF token:', csrfToken ? 'found' : 'not found');
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest'
+    };
+    if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
+
     // Step 1: check-existing-user
     await client.post(`${BASE_URL}/check-existing-user`, {
       email: CREDENTIALS.email,
       password: CREDENTIALS.password
-    }, {
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-    });
-    console.log('[auth] Step 1 done: check-existing-user');
+    }, { headers });
+    console.log('[auth] Step 1 done');
+
+    // Refresh CSRF token after step 1
+    const cookies2 = await jar.getCookies(BASE_URL);
+    const xsrf2 = cookies2.find(c => c.key === 'XSRF-TOKEN');
+    if (xsrf2) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf2.value);
 
     // Step 2: pin-check
     await client.post(`${BASE_URL}/pin-check`, {
       profile: CREDENTIALS.profile_id,
       pin: null
-    }, {
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-    });
-    console.log('[auth] Step 2 done: pin-check');
+    }, { headers });
+    console.log('[auth] Step 2 done');
+
+    // Refresh CSRF again
+    const cookies3 = await jar.getCookies(BASE_URL);
+    const xsrf3 = cookies3.find(c => c.key === 'XSRF-TOKEN');
+    if (xsrf3) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf3.value);
 
     // Step 3: login
-    await client.post(`${BASE_URL}/login`, {}, {
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-    });
-    console.log('[auth] Step 3 done: login');
+    await client.post(`${BASE_URL}/login`, {}, { headers });
+    console.log('[auth] Step 3 done');
 
     saveAuth();
     console.log('[auth] Login complete');
@@ -83,24 +105,6 @@ async function doLogin() {
   } catch (e) {
     console.error('[auth] Login failed:', e.response?.status, e.message);
     return false;
-  }
-}
-
-async function ensureAuth() {
-  const loaded = loadAuth();
-  if (!loaded) {
-    return await doLogin();
-  }
-  // Validate by hitting profile
-  try {
-    await client.get(`${BASE_URL}/profile`, {
-      headers: { 'Accept': 'application/json' }
-    });
-    console.log('[auth] Session valid');
-    return true;
-  } catch (e) {
-    console.log('[auth] Session invalid, re-logging in...');
-    return await doLogin();
   }
 }
 
