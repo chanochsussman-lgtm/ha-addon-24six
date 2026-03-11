@@ -18,7 +18,7 @@ export default function Login() {
     setLoading(true)
     setError('')
     try {
-      const r = await fetch('/api/auth/login', {
+      const r = await fetch((window.ingressPath||'') + '/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -41,7 +41,7 @@ export default function Login() {
 
   const handleProfileSelect = async () => {
     const profile = profiles.find(p => p.id === selectedProfile)
-    await fetch('/api/auth/select-profile', {
+    await fetch((window.ingressPath||'') + '/api/auth/select-profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ profileId: selectedProfile, profileName: profile?.name }),
