@@ -234,7 +234,7 @@ app.get('/api/stories', (req, res) => proxy(req, res, '/app/story'));
 app.get('/api/collections', (req, res) => proxy(req, res, '/app/music/collection'));
 app.get('/api/collections/:id', (req, res) => proxy(req, res, `/app/music/collection/${req.params.id}`));
 app.get('/api/collections/:id/songs', (req, res) =>
-  proxy(req, res, '/app/music/content', { params: { collection_id: req.params.id } })
+  proxy(req, res, `/app/music/content/collection/${req.params.id}`)
 );
 
 // Search
