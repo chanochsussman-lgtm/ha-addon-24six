@@ -1,123 +1,94 @@
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react'
-import { api } from '../api'
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react'
 
-// Singleton audio element
-const audioEl = new Audio()
-audioEl.crossOrigin = 'use-credentials'
-audioEl.preload = 'metadata'
-
-const PlayerContext = createContext(null)
+const Ctx = createContext(null)
+const audio = new Audio()
+audio.crossOrigin = 'use-credentials'
 
 export function PlayerProvider({ children }) {
-  const [currentTrack, setCurrentTrack] = useState(null)
-  const [queue, setQueue] = useState([])
-  const [queueIndex, setQueueIndex] = useState(0)
+  const [track, setTrack]     = useState(null)
+  const [queue, setQueue]     = useState([])
+  const [qIdx, setQIdx]       = useState(0)
   const [playing, setPlaying] = useState(false)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
-  const [volume, setVolume] = useState(1)
   const [loading, setLoading] = useState(false)
 
-  // Wire up audio element events
   useEffect(() => {
-    const onPlay = () => setPlaying(true)
+    const onTime  = () => setProgress(audio.currentTime)
+    const onDur   = () => setDuration(isNaN(audio.duration) ? 0 : audio.duration)
+    const onPlay  = () => { setPlaying(true); setLoading(false) }
     const onPause = () => setPlaying(false)
-    const onEnded = () => playNext()
-    const onTimeUpdate = () => setProgress(audioEl.currentTime)
-    const onDuration = () => setDuration(audioEl.duration)
-    const onWaiting = () => setLoading(true)
-    const onCanPlay = () => setLoading(false)
-
-    audioEl.addEventListener('play', onPlay)
-    audioEl.addEventListener('pause', onPause)
-    audioEl.addEventListener('ended', onEnded)
-    audioEl.addEventListener('timeupdate', onTimeUpdate)
-    audioEl.addEventListener('durationchange', onDuration)
-    audioEl.addEventListener('waiting', onWaiting)
-    audioEl.addEventListener('canplay', onCanPlay)
-
-    // Android: prevent suspension on visibility change
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && playing) audioEl.play().catch(() => {})
-    })
-
+    const onWait  = () => setLoading(true)
+    const onCan   = () => setLoading(false)
+    const onEnd   = () => playNext()
+    audio.addEventListener('timeupdate', onTime)
+    audio.addEventListener('durationchange', onDur)
+    audio.addEventListener('play', onPlay)
+    audio.addEventListener('pause', onPause)
+    audio.addEventListener('waiting', onWait)
+    audio.addEventListener('canplay', onCan)
+    audio.addEventListener('ended', onEnd)
     return () => {
-      audioEl.removeEventListener('play', onPlay)
-      audioEl.removeEventListener('pause', onPause)
-      audioEl.removeEventListener('ended', onEnded)
-      audioEl.removeEventListener('timeupdate', onTimeUpdate)
-      audioEl.removeEventListener('durationchange', onDuration)
-      audioEl.removeEventListener('waiting', onWaiting)
-      audioEl.removeEventListener('canplay', onCanPlay)
+      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('durationchange', onDur)
+      audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('pause', onPause)
+      audio.removeEventListener('waiting', onWait)
+      audio.removeEventListener('canplay', onCan)
+      audio.removeEventListener('ended', onEnd)
     }
-  }, [playing])
-
-  // MediaSession API
-  useEffect(() => {
-    if (!currentTrack || !('mediaSession' in navigator)) return
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: currentTrack.title,
-      artist: currentTrack.subtitle || '',
-      artwork: currentTrack.img ? [{ src: currentTrack.img, sizes: '512x512' }] : []
-    })
-    navigator.mediaSession.setActionHandler('play', () => audioEl.play())
-    navigator.mediaSession.setActionHandler('pause', () => audioEl.pause())
-    navigator.mediaSession.setActionHandler('previoustrack', playPrev)
-    navigator.mediaSession.setActionHandler('nexttrack', playNext)
-  }, [currentTrack])
-
-  const playTrack = useCallback((track, tracks = [], index = 0) => {
-    setCurrentTrack(track)
-    setQueue(tracks)
-    setQueueIndex(index)
-    audioEl.src = api.audioUrl(track.id)
-    audioEl.load()
-    audioEl.play().catch(e => console.error('[player] Play error:', e))
   }, [])
+
+  const _play = useCallback((t, q, i) => {
+    setTrack(t); setQueue(q); setQIdx(i); setLoading(true)
+    audio.src = (window.ingressPath || '') + '/api/audio/' + t.id
+    audio.play().catch(console.error)
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: t.title, artist: t.artist || '',
+        artwork: t.img ? [{ src: t.img }] : []
+      })
+    }
+  }, [])
+
+  const playTrack = useCallback((t, q = [], i = 0) => _play(t, q, i), [_play])
+  const togglePlay = useCallback(() => { audio.paused ? audio.play() : audio.pause() }, [])
+  const seek = useCallback(t => { audio.currentTime = t }, [])
 
   const playNext = useCallback(() => {
-    if (queue.length === 0) return
-    const next = (queueIndex + 1) % queue.length
-    setQueueIndex(next)
-    playTrack(queue[next], queue, next)
-  }, [queue, queueIndex, playTrack])
+    setQueue(q => {
+      setQIdx(i => {
+        if (i < q.length - 1) { _play(q[i+1], q, i+1); return i+1 }
+        return i
+      })
+      return q
+    })
+  }, [_play])
 
   const playPrev = useCallback(() => {
-    if (audioEl.currentTime > 3) {
-      audioEl.currentTime = 0
-      return
-    }
-    if (queue.length === 0) return
-    const prev = (queueIndex - 1 + queue.length) % queue.length
-    setQueueIndex(prev)
-    playTrack(queue[prev], queue, prev)
-  }, [queue, queueIndex, playTrack])
+    if (audio.currentTime > 3) { seek(0); return }
+    setQueue(q => {
+      setQIdx(i => {
+        if (i > 0) { _play(q[i-1], q, i-1); return i-1 }
+        return i
+      })
+      return q
+    })
+  }, [_play, seek])
 
-  const togglePlay = useCallback(() => {
-    if (playing) audioEl.pause()
-    else audioEl.play().catch(() => {})
-  }, [playing])
-
-  const seek = useCallback((time) => {
-    audioEl.currentTime = time
-  }, [])
-
-  const changeVolume = useCallback((v) => {
-    audioEl.volume = v
-    setVolume(v)
-  }, [])
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return
+    navigator.mediaSession.setActionHandler('play', () => audio.play())
+    navigator.mediaSession.setActionHandler('pause', () => audio.pause())
+    navigator.mediaSession.setActionHandler('nexttrack', playNext)
+    navigator.mediaSession.setActionHandler('previoustrack', playPrev)
+  }, [playNext, playPrev])
 
   return (
-    <PlayerContext.Provider value={{
-      currentTrack, queue, queueIndex,
-      playing, progress, duration, volume, loading,
-      playTrack, playNext, playPrev, togglePlay, seek, changeVolume
-    }}>
+    <Ctx.Provider value={{ track, queue, qIdx, playing, progress, duration, loading, playTrack, togglePlay, seek, playNext, playPrev }}>
       {children}
-    </PlayerContext.Provider>
+    </Ctx.Provider>
   )
 }
 
-export function usePlayer() {
-  return useContext(PlayerContext)
-}
+export const usePlayer = () => useContext(Ctx)

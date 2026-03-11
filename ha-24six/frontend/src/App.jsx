@@ -1,48 +1,74 @@
-import { useEffect, useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import { PlayerProvider } from './store/index.jsx'
 import { api } from './api'
-import Sidebar from './components/Sidebar'
 import Player from './components/Player'
+import BottomNav from './components/BottomNav'
 import Home from './pages/Home'
 import CollectionPage from './pages/CollectionPage'
 import ArtistPage from './pages/ArtistPage'
 import SearchPage from './pages/SearchPage'
-import Login from './pages/Login'
+import PlaylistPage from './pages/PlaylistPage'
+
+function Login({ onLogin }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const go = async () => {
+    setLoading(true); setError(null)
+    try {
+      const r = await api.login()
+      if (r.success) onLogin()
+      else setError('Login failed. Check server logs.')
+    } catch { setError('Network error.') }
+    finally { setLoading(false) }
+  }
+  return (
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', gap: 20, padding: 32 }}>
+      <div style={{ fontSize: 56 }}>🎵</div>
+      <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>24Six</div>
+      <div style={{ color: 'var(--text-secondary)', fontSize: 14 }}>Jewish Music Streaming</div>
+      {error && <div style={{ background: 'rgba(220,50,50,0.15)', border: '1px solid rgba(220,50,50,0.3)', color: '#ff6b6b', padding: '10px 20px', borderRadius: 8, fontSize: 13 }}>{error}</div>}
+      <button onClick={go} disabled={loading} style={{ background: loading ? 'var(--accent-dim)' : 'var(--accent)', color: '#000', fontWeight: 700, fontSize: 15, padding: '13px 36px', borderRadius: 30, opacity: loading ? 0.7 : 1, transition: 'all 0.2s' }}>
+        {loading ? 'Connecting...' : 'Connect to 24Six'}
+      </button>
+    </div>
+  )
+}
+
+function Splash() {
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+      <div style={{ width: 32, height: 32, border: '2px solid var(--accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  )
+}
 
 export default function App() {
-  const [authed, setAuthed] = useState(null) // null = loading
+  const [authed, setAuthed] = useState(null)
 
   useEffect(() => {
     api.status().then(d => setAuthed(d.authenticated)).catch(() => setAuthed(false))
   }, [])
 
-  if (authed === null) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)' }}>
-        <div className="spinner" />
-      </div>
-    )
-  }
-
-  if (!authed) {
-    return <Login onLogin={() => setAuthed(true)} />
-  }
+  if (authed === null) return <Splash />
+  if (!authed) return <Login onLogin={() => setAuthed(true)} />
 
   return (
     <PlayerProvider>
-      <div className="layout">
-        <Sidebar />
-        <div className="main-content">
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'calc(var(--player-height) + var(--nav-height) + 12px)' }}>
           <Routes>
             <Route path="/" element={<Home />} />
+            <Route path="/search" element={<SearchPage />} />
             <Route path="/collection/:id" element={<CollectionPage />} />
             <Route path="/artist/:id" element={<ArtistPage />} />
-            <Route path="/search" element={<SearchPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/playlist/:id" element={<PlaylistPage />} />
           </Routes>
         </div>
-        <Player />
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 }}>
+          <Player />
+          <BottomNav />
+        </div>
       </div>
     </PlayerProvider>
   )
