@@ -242,11 +242,39 @@ app.get('/api/collections/:id/songs', (req, res) => proxy(req, res, `/app/conten
 // Songs
 app.get('/api/songs/:id', (req, res) => proxy(req, res, `/app/content/${req.params.id}`));
 
-// Search
-app.get('/api/search', async (req, res) => {
-  const { q, type = 'collection' } = req.query;
+// Search - quick autocomplete (typeahead)
+app.get('/api/search/quick', (req, res) => {
+  const { q } = req.query;
   if (!q) return res.json([]);
-  proxy(req, res, `/app/music/search`, { params: { q, type } });
+  proxy(req, res, `/app/music/search/quick`, { params: { q } });
+});
+
+// Search - full results (songs, artists, albums, playlists by category)
+app.get('/api/search', (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.json({});
+  proxy(req, res, `/app/music/search`, { params: { q } });
+});
+
+// ── Favorites / Library ───────────────────────────────────────────────────────
+app.get('/api/library/favorites', (req, res) => proxy(req, res, '/app/music/favorite'));
+
+app.post('/api/library/favorites/:id', async (req, res) => {
+  try {
+    const r = await client.post(`${BASE_URL}/app/music/content/${req.params.id}/favorite`, {}, {
+      headers: { 'X-XSRF-TOKEN': csrfToken, 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    res.json(r.data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.delete('/api/library/favorites/:id', async (req, res) => {
+  try {
+    const r = await client.delete(`${BASE_URL}/app/music/content/${req.params.id}/favorite`, {
+      headers: { 'X-XSRF-TOKEN': csrfToken, 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    res.json(r.data);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Audio Streaming ───────────────────────────────────────────────────────────

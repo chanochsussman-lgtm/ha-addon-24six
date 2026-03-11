@@ -3,12 +3,49 @@ import { api } from '../api'
 import BannerCarousel from '../components/BannerCarousel'
 import SectionRow from '../components/SectionRow'
 
+// Normalize items to a common shape
+function normalizeItems(arr, defaultType = 'collection') {
+  if (!Array.isArray(arr)) return []
+  return arr.map(item => ({
+    id: item.id,
+    title: item.title || item.name,
+    subtitle: item.subtitle || item.artists?.map(a => a.name).join(', ') || '',
+    img: item.img || item.image || item.artwork?.[0]?.img,
+    type: item.type || defaultType,
+    color: item.color,
+    artists: item.artists,
+  })).filter(i => i.id)
+}
+
+// Try many possible keys for each section
+function extractSection(data, keys) {
+  for (const key of keys) {
+    const val = data[key]
+    if (Array.isArray(val) && val.length > 0) return val
+  }
+  return []
+}
+
 export default function Home() {
-  const [data, setData]     = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [homeData, setHomeData] = useState(null)
+  const [banners, setBanners]   = useState([])
+  const [recent, setRecent]     = useState([])
+  const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
-    api.home().then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+    Promise.all([
+      api.home().catch(() => null),
+      api.banners().catch(() => []),
+      api.recent().catch(() => []),
+    ]).then(([home, ban, rec]) => {
+      setHomeData(home)
+      // banners can be top-level or nested
+      const banArr = Array.isArray(ban) ? ban : (ban?.banners || ban?.data || [])
+      setBanners(banArr)
+      const recArr = Array.isArray(rec) ? rec : (rec?.content || rec?.data || [])
+      setRecent(recArr)
+      setLoading(false)
+    })
   }, [])
 
   if (loading) return (
@@ -18,30 +55,83 @@ export default function Home() {
     </div>
   )
 
-  if (!data) return (
-    <div style={{ padding: 40, textAlign: 'center', color: 'var(--muted)' }}>No content found</div>
-  )
+  const d = homeData || {}
 
+  // Map sections - try many possible key names from the API
   const sections = [
-    { key: 'releases',      title: 'Featured New Releases' },
-    { key: 'trending',      title: 'Trending Now' },
-    { key: 'by24Six',       title: '24Six Presents' },
-    { key: 'myPlaylists',   title: 'My Playlists',      type: 'playlist' },
-    { key: 'playlists',     title: '24Six Playlists',   type: 'playlist' },
-    { key: 'newAlbums',     title: 'New Albums' },
-    { key: 'newSingles',    title: 'New Singles' },
-    { key: 'newStories',    title: 'New Stories' },
-    { key: 'newArtists',    title: 'Discover New Artists', circle: true },
-    { key: 'recent',        title: 'Recently Listened' },
-    { key: 'artists',       title: 'Browse Artists',    circle: true },
-    { key: 'femaleArtists', title: 'Female Artists',    circle: true },
+    {
+      title: 'Featured New Releases',
+      items: normalizeItems(extractSection(d, ['releases', 'newReleases', 'featured', 'featured_releases', 'new_releases', 'featuredReleases'])),
+    },
+    {
+      title: 'Trending Now',
+      items: normalizeItems(extractSection(d, ['trending', 'trending_now', 'trendingNow', 'popular'])),
+    },
+    {
+      title: '24Six Presents',
+      items: normalizeItems(extractSection(d, ['by24Six', 'presents', '24sixPresents', 'curated'])),
+    },
+    {
+      title: 'My Playlists',
+      items: normalizeItems(extractSection(d, ['myPlaylists', 'my_playlists', 'userPlaylists']), 'playlist'),
+      type: 'playlist',
+    },
+    {
+      title: '24Six Playlists',
+      items: normalizeItems(extractSection(d, ['playlists', 'featuredPlaylists', 'featured_playlists']), 'playlist'),
+      type: 'playlist',
+    },
+    {
+      title: 'New Albums',
+      items: normalizeItems(extractSection(d, ['newAlbums', 'new_albums', 'albums'])),
+    },
+    {
+      title: 'New Singles',
+      items: normalizeItems(extractSection(d, ['newSingles', 'new_singles', 'singles'])),
+    },
+    {
+      title: 'New Stories',
+      items: normalizeItems(extractSection(d, ['stories', 'newStories', 'new_stories'])),
+    },
+    {
+      title: 'Discover New Artists',
+      items: normalizeItems(extractSection(d, ['newArtists', 'new_artists', 'featuredArtists']), 'artist'),
+      circle: true,
+      type: 'artist',
+    },
+    {
+      title: 'Recently Listened',
+      items: normalizeItems(recent, 'collection'),
+    },
+    {
+      title: 'Browse Artists',
+      items: normalizeItems(extractSection(d, ['artists']), 'artist'),
+      circle: true,
+      type: 'artist',
+    },
+    {
+      title: 'Female Artists',
+      items: normalizeItems(extractSection(d, ['femaleArtists', 'female', 'female_artists']), 'collection'),
+    },
   ]
 
-  const categoryRows = Array.isArray(data.categories)
-    ? data.categories
-        .filter(c => Array.isArray(c.collections) && c.collections.length > 0)
-        .map(c => ({ key: `cat_${c.id}`, title: c.title, items: c.collections }))
+  // Category rows
+  const cats = extractSection(d, ['categories', 'featured', 'featured_categories'])
+  const categoryRows = Array.isArray(cats)
+    ? cats
+        .filter(c => Array.isArray(c.collections || c.data || c.items) && (c.collections || c.data || c.items).length > 0)
+        .map(c => ({
+          key: `cat_${c.id || c.category?.id}`,
+          title: c.title || c.category?.title,
+          items: normalizeItems(c.collections || c.data || c.items || []),
+        }))
     : []
+
+  // Fallback: if homeData has an array of unknown sections, try to render them
+  const knownKeys = new Set(['releases','newReleases','featured','trending','trendingNow','by24Six','presents','myPlaylists','playlists','featuredPlaylists','newAlbums','newSingles','stories','newArtists','artists','femaleArtists','categories','banners','banner'])
+  const unknownSections = Object.entries(d)
+    .filter(([k, v]) => !knownKeys.has(k) && Array.isArray(v) && v.length > 0 && v[0]?.id)
+    .map(([k, v]) => ({ title: k, items: normalizeItems(v) }))
 
   return (
     <div>
@@ -49,27 +139,28 @@ export default function Home() {
         <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent)', letterSpacing: -0.5 }}>24Six</div>
       </div>
 
-      {Array.isArray(data.banners) && data.banners.length > 0 && (
-        <BannerCarousel banners={data.banners} />
-      )}
+      {banners.length > 0 && <BannerCarousel banners={banners} />}
 
-      {sections.map(({ key, title, circle, type }) => {
-        let items = data[key]
-        if (!Array.isArray(items) || items.length === 0) return null
-        if (type) items = items.map(i => ({ ...i, type }))
+      {sections.map(({ title, items, circle, type }) => {
+        if (!items?.length) return null
+        const mapped = type ? items.map(i => ({ ...i, type })) : items
         return (
           <SectionRow
-            key={key}
+            key={title}
             title={title}
-            items={items}
-            cardSize={circle ? 95 : key === 'categories' ? 100 : 120}
-            circle={circle}
+            items={mapped}
+            cardSize={circle ? 95 : 120}
+            circle={!!circle}
           />
         )
       })}
 
       {categoryRows.map(({ key, title, items }) => (
         <SectionRow key={key} title={title} items={items} cardSize={120} />
+      ))}
+
+      {unknownSections.map(({ title, items }) => (
+        <SectionRow key={title} title={title} items={items} cardSize={120} />
       ))}
     </div>
   )
