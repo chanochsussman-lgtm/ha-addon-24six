@@ -1,6 +1,6 @@
 name: "24Six"
 description: "24Six Jewish music streaming — browse, search, play and control WiiM speakers directly from Home Assistant."
-version: "1.4.2"
+version: "1.4.3"
 slug: "twentyfour_six"
 url: "https://github.com/chanochsussman-lgtm/ha-addon-24six"
 
