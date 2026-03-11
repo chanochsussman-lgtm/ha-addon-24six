@@ -1,4 +1,0 @@
-configuration: {}
-
-network:
-  8484/tcp: Web UI port (use Ingress instead)
