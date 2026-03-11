@@ -218,7 +218,11 @@ app.post('/api/setup/reset', (req, res) => {
   }
 });
 
-// ── Music API Routes ──────────────────────────────────────────────────────────
+// Debug - raw home data
+app.get('/api/debug/home', (req, res) => proxy(req, res, '/app/music'));
+app.get('/api/debug/banners', (req, res) => proxy(req, res, '/app/music/banner'));
+
+// Music API Routes ──────────────────────────────────────────────────────────
 app.get('/api/home',            (req, res) => proxy(req, res, '/app/music'));
 app.get('/api/banners',         (req, res) => proxy(req, res, '/app/music/banner'));
 app.get('/api/browse/recent',   (req, res) => proxy(req, res, '/app/music/content/recent'));
@@ -242,7 +246,7 @@ app.get('/api/songs/:id', (req, res) => proxy(req, res, `/app/content/${req.para
 app.get('/api/search', async (req, res) => {
   const { q, type = 'collection' } = req.query;
   if (!q) return res.json([]);
-  proxy(req, res, `/app/music/${type}/search`, { params: { q } });
+  proxy(req, res, `/app/music/search`, { params: { q, type } });
 });
 
 // ── Audio Streaming ───────────────────────────────────────────────────────────
