@@ -338,6 +338,74 @@ app.get('/api/img', async (req, res) => {
   }
 });
 
+
+// ── HA Media Players ──────────────────────────────────────────────────────────
+const HA_URL     = 'http://supervisor/core';
+const HA_TOKEN   = process.env.SUPERVISOR_TOKEN;
+const haHeaders  = () => ({ 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' });
+
+// List all media_player entities
+app.get('/api/ha/speakers', async (req, res) => {
+  try {
+    const r = await axios.get(`${HA_URL}/api/states`, { headers: haHeaders() });
+    const players = r.data
+      .filter(e => e.entity_id.startsWith('media_player.'))
+      .map(e => ({
+        entity_id: e.entity_id,
+        name: e.attributes.friendly_name || e.entity_id,
+        state: e.state,
+        volume: e.attributes.volume_level,
+        icon: e.attributes.entity_picture || null,
+      }));
+    res.json(players);
+  } catch (e) {
+    console.error('[ha] speakers error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Cast a track to a HA media player
+app.post('/api/ha/play', async (req, res) => {
+  try {
+    const { entity_id, track_id } = req.body;
+    if (!entity_id || !track_id) return res.status(400).json({ error: 'entity_id and track_id required' });
+
+    // Get the Mux stream URL
+    const playUrl = `${BASE_URL}/app/content/${track_id}/play`;
+    const redirect = await client.get(playUrl, {
+      maxRedirects: 0,
+      validateStatus: s => s === 302 || s === 200
+    });
+    const streamUrl = redirect.headers?.location;
+    if (!streamUrl) return res.status(404).json({ error: 'No stream URL' });
+
+    // Tell HA to play it
+    await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
+      entity_id,
+      media_content_id: streamUrl,
+      media_content_type: 'music',
+    }, { headers: haHeaders() });
+
+    res.json({ ok: true, entity_id, stream: streamUrl.slice(0, 60) + '...' });
+  } catch (e) {
+    console.error('[ha] play error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Set volume
+app.post('/api/ha/volume', async (req, res) => {
+  try {
+    const { entity_id, volume } = req.body;
+    await axios.post(`${HA_URL}/api/services/media_player/volume_set`, {
+      entity_id, volume_level: volume
+    }, { headers: haHeaders() });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Serve React Frontend ──────────────────────────────────────────────────────
 const DIST = path.join(__dirname, 'frontend', 'dist');
 app.use(express.static(DIST));
