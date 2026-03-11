@@ -87,22 +87,11 @@ app.post('/api/setup/profiles', async (req, res) => {
 
 // ── Select profile ──────────────────────────────────────────────────────────
 app.post('/api/setup/save', async (req, res) => {
-  const { email, password, profileId } = req.body;
+  const { profileId } = req.body;
   if (!profileId) return res.status(400).json({ error: 'Missing profileId' });
   try {
-    // Re-login with profile_id to get profile-scoped token
-    const resp = await fetch(`${BASE}/login`, {
-      method: 'POST',
-      headers: PLATFORM_HEADERS,
-      body: JSON.stringify({ email, password, profile_id: profileId }),
-    });
-
-    let data = await resp.json();
-    // If profile-scoped login doesn't return new token, keep existing
-    if (!data.token) data = { token: auth?.token };
-
     const profile = (auth?.profiles || []).find(p => p.id == profileId) || { id: profileId };
-    auth = { token: data.token, profile, profileId };
+    auth = { token: auth.token, profile, profileId };
     saveAuth(auth);
     res.json({ ok: true, profile });
   } catch (err) {

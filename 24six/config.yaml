@@ -1,6 +1,6 @@
 name: "24Six"
 description: "24Six music streaming for Home Assistant"
-version: "2.0.02"
+version: "2.0.03"
 slug: "twentyfour_six"
 init: false
 arch:
