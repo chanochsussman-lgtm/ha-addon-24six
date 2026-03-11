@@ -17,6 +17,7 @@ const PLATFORM_HEADERS = {
   'X-PLATFORM-KEY': 'production-android-44fd2f70',
   'X-PLATFORM-DEVICE': 'android',
   'Content-Type': 'application/json',
+  'Accept': 'application/json',
 };
 
 // ── Persist auth to /data ──────────────────────────────────────────────────
