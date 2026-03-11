@@ -98,7 +98,7 @@ async function doLogin() {
     // Step 2: pin-check
     console.log('[auth] Step 2: profiles/pin-check with profile_id:', CREDENTIALS.profile_id);
     const step2 = await client.post(`${BASE_URL}/profiles/pin-check`, {
-      profile: CREDENTIALS.profile_id,
+      profile_id: CREDENTIALS.profile_id,
       pin: null
     }, { headers, validateStatus: () => true });
     console.log('[auth] Step 2 status:', step2.status, JSON.stringify(step2.data));
