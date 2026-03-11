@@ -8,11 +8,11 @@ WORKDIR /app
 
 # ── Install backend deps ────────────────────────────────────────────────────
 COPY backend/package*.json ./backend/
-RUN cd backend && npm install --production
+RUN cd backend && npm install --legacy-peer-deps --production
 
 # ── Install frontend deps and build ────────────────────────────────────────
 COPY frontend/package*.json ./frontend/
-RUN cd frontend && npm install
+RUN cd frontend && npm install --legacy-peer-deps
 
 COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
