@@ -48,15 +48,25 @@ export function PlayerProvider({ children }) {
     }
   }, [])
 
-  const _play = (t, q, i) => {
+  const _play = async (t, q, i) => {
     setTrack(t)
     setQueue(q)
     setQIdx(i)
     queueRef.current = q
     qIdxRef.current = i
     setLoading(true)
-    audio.src = (window.ingressPath || '') + '/api/audio/' + t.id
-    audio.play().catch(console.error)
+    try {
+      const base = window.ingressPath || ''
+      const res = await fetch(`${base}/api/audio/${t.id}`)
+      const data = await res.json()
+      const url = data?.url || data
+      if (!url || typeof url !== 'string') throw new Error('No URL in response')
+      audio.src = url
+      await audio.play()
+    } catch (e) {
+      console.error('[player] play error:', e)
+      setLoading(false)
+    }
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title, artist: t.artist || '',

@@ -283,6 +283,7 @@ app.delete('/api/library/favorites/:id', async (req, res) => {
 });
 
 // ── Audio Streaming ───────────────────────────────────────────────────────────
+// Get the CDN URL and redirect the client directly - Mux URLs must be hit by the client
 app.get('/api/audio/:id', async (req, res) => {
   try {
     const playUrl = `${BASE_URL}/app/content/${req.params.id}/play`;
@@ -293,25 +294,13 @@ app.get('/api/audio/:id', async (req, res) => {
 
     const cdnUrl = redirect.headers?.location;
     if (!cdnUrl) {
-      console.error('[audio] no redirect location for id:', req.params.id, 'status:', redirect.status);
+      console.error('[audio] no redirect for id:', req.params.id, 'status:', redirect.status);
       return res.status(404).json({ error: 'No audio URL' });
     }
 
-    const rangeHeader = req.headers.range;
-    const headers = { 'Accept': '*/*' };
-    if (rangeHeader) headers['Range'] = rangeHeader;
-
-    const audioResponse = await axios.get(cdnUrl, {
-      responseType: 'stream',
-      headers,
-      validateStatus: () => true
-    });
-
-    res.status(audioResponse.status);
-    ['content-type', 'content-length', 'content-range', 'accept-ranges'].forEach(h => {
-      if (audioResponse.headers[h]) res.setHeader(h, audioResponse.headers[h]);
-    });
-    audioResponse.data.pipe(res);
+    console.log('[audio] redirecting client to:', cdnUrl.slice(0, 80));
+    // Send the URL to the client - let the browser fetch it directly
+    res.json({ url: cdnUrl });
   } catch (e) {
     console.error('[audio] Error:', e.message);
     res.status(500).json({ error: e.message });
