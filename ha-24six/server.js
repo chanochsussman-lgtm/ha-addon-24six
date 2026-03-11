@@ -115,7 +115,9 @@ async function doLogin() {
 
     // Step 3: login
     console.log('[auth] Step 3: profiles/login...');
-    const step3 = await client.post(`${BASE_URL}/profiles/login`, {}, { headers, validateStatus: () => true });
+    const step3 = await client.post(`${BASE_URL}/profiles/login`, {
+      profile: CREDENTIALS.profile_id
+    }, { headers, validateStatus: () => true });
     console.log('[auth] Step 3 status:', step3.status, JSON.stringify(step3.data));
     if (step3.status >= 400) throw new Error(`Step 3 failed: ${step3.status} ${JSON.stringify(step3.data)}`);
 
