@@ -1,0 +1,16 @@
+{
+  "name": "24six-backend",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "axios-cookiejar-support": "^4.0.7",
+    "tough-cookie": "^4.1.3",
+    "ws": "^8.16.0"
+  }
+}
