@@ -54,74 +54,105 @@ async function doLogin() {
   console.log('[auth] Starting login flow...');
   try {
     // Step 0: GET homepage to get CSRF token
-    await client.get(`${BASE_URL}/`, {
-      headers: { 'Accept': 'text/html' }
+    console.log('[auth] Step 0: fetching homepage for CSRF...');
+    const homeRes = await client.get(`${BASE_URL}/`, {
+      headers: { 'Accept': 'text/html' },
+      validateStatus: () => true
     });
+    console.log('[auth] Step 0 status:', homeRes.status);
 
     // Extract CSRF token from cookies
     const cookies = await jar.getCookies(BASE_URL);
+    console.log('[auth] All cookies:', cookies.map(c => c.key).join(', '));
     const xsrfCookie = cookies.find(c => c.key === 'XSRF-TOKEN');
     const csrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.value) : null;
-    console.log('[auth] CSRF token:', csrfToken ? 'found' : 'not found');
+    console.log('[auth] CSRF token:', csrfToken ? `found (${csrfToken.substring(0,20)}...)` : 'NOT FOUND');
 
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'X-Requested-With': 'XMLHttpRequest'
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': `${BASE_URL}/`,
+      'Origin': BASE_URL
     };
     if (csrfToken) headers['X-XSRF-TOKEN'] = csrfToken;
 
     // Step 1: check-existing-user
-    await client.post(`${BASE_URL}/check-existing-user`, {
+    console.log('[auth] Step 1: check-existing-user...');
+    const step1 = await client.post(`${BASE_URL}/check-existing-user`, {
       email: CREDENTIALS.email,
       password: CREDENTIALS.password
-    }, { headers });
-    console.log('[auth] Step 1 done');
+    }, { headers, validateStatus: () => true });
+    console.log('[auth] Step 1 status:', step1.status, JSON.stringify(step1.data));
+    if (step1.status >= 400) throw new Error(`Step 1 failed: ${step1.status} ${JSON.stringify(step1.data)}`);
 
     // Refresh CSRF after step 1
     const cookies2 = await jar.getCookies(BASE_URL);
+    console.log('[auth] Cookies after step 1:', cookies2.map(c => c.key).join(', '));
     const xsrf2 = cookies2.find(c => c.key === 'XSRF-TOKEN');
-    if (xsrf2) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf2.value);
+    if (xsrf2) {
+      headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf2.value);
+      console.log('[auth] CSRF refreshed after step 1');
+    }
 
     // Step 2: pin-check
-    await client.post(`${BASE_URL}/profiles/pin-check`, {
+    console.log('[auth] Step 2: profiles/pin-check with profile_id:', CREDENTIALS.profile_id);
+    const step2 = await client.post(`${BASE_URL}/profiles/pin-check`, {
       profile: CREDENTIALS.profile_id,
       pin: null
-    }, { headers });
-    console.log('[auth] Step 2 done');
+    }, { headers, validateStatus: () => true });
+    console.log('[auth] Step 2 status:', step2.status, JSON.stringify(step2.data));
+    if (step2.status >= 400) throw new Error(`Step 2 failed: ${step2.status} ${JSON.stringify(step2.data)}`);
 
     // Refresh CSRF after step 2
     const cookies3 = await jar.getCookies(BASE_URL);
+    console.log('[auth] Cookies after step 2:', cookies3.map(c => c.key).join(', '));
     const xsrf3 = cookies3.find(c => c.key === 'XSRF-TOKEN');
-    if (xsrf3) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf3.value);
+    if (xsrf3) {
+      headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf3.value);
+      console.log('[auth] CSRF refreshed after step 2');
+    }
 
     // Step 3: login
-    await client.post(`${BASE_URL}/profiles/login`, {}, { headers });
-    console.log('[auth] Step 3 done');
+    console.log('[auth] Step 3: profiles/login...');
+    const step3 = await client.post(`${BASE_URL}/profiles/login`, {}, { headers, validateStatus: () => true });
+    console.log('[auth] Step 3 status:', step3.status, JSON.stringify(step3.data));
+    if (step3.status >= 400) throw new Error(`Step 3 failed: ${step3.status} ${JSON.stringify(step3.data)}`);
+
+    // Final cookies
+    const finalCookies = await jar.getCookies(BASE_URL);
+    console.log('[auth] Final cookies:', finalCookies.map(c => c.key).join(', '));
 
     saveAuth();
-    console.log('[auth] Login complete');
+    console.log('[auth] Login complete!');
     return true;
   } catch (e) {
     console.error('[auth] Login failed:', e.response?.status, e.message);
+    if (e.response?.data) console.error('[auth] Response body:', JSON.stringify(e.response.data));
     return false;
   }
 }
 
 async function ensureAuth() {
+  console.log('[auth] ensureAuth called');
   const loaded = loadAuth();
   if (!loaded) {
+    console.log('[auth] No saved auth, doing fresh login');
     return await doLogin();
   }
   // Validate session
   try {
-    await client.get(`${BASE_URL}/app/profile`, {
-      headers: { 'Accept': 'application/json' }
+    console.log('[auth] Validating saved session...');
+    const res = await client.get(`${BASE_URL}/app/profile`, {
+      headers: { 'Accept': 'application/json' },
+      validateStatus: () => true
     });
+    console.log('[auth] Session check status:', res.status);
+    if (res.status >= 400) throw new Error(`Session invalid: ${res.status}`);
     console.log('[auth] Session valid');
     return true;
   } catch (e) {
-    console.log('[auth] Session invalid, re-logging in...');
+    console.log('[auth] Session invalid, re-logging in...', e.message);
     return await doLogin();
   }
 }
@@ -131,6 +162,7 @@ async function proxy(req, res, urlPath, options = {}) {
   try {
     const url = `${BASE_URL}${urlPath}`;
     const method = options.method || 'GET';
+    console.log(`[proxy] ${method} ${url}`, options.params || req.query);
     const response = await client({
       method,
       url,
@@ -139,6 +171,7 @@ async function proxy(req, res, urlPath, options = {}) {
       headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
       validateStatus: () => true
     });
+    console.log(`[proxy] ${method} ${urlPath} → ${response.status}`);
 
     if (response.status === 401 || response.status === 403) {
       console.log('[proxy] Auth expired, re-logging in...');
@@ -150,6 +183,7 @@ async function proxy(req, res, urlPath, options = {}) {
         data: options.data,
         headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
       });
+      console.log(`[proxy] Retry → ${retry.status}`);
       return res.json(retry.data);
     }
 
