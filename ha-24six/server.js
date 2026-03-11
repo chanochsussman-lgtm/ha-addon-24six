@@ -54,11 +54,11 @@ async function doLogin() {
   console.log('[auth] Starting login flow...');
   try {
     // Step 0: GET homepage to get CSRF token
-    const home = await client.get(`${BASE_URL}/`, {
+    await client.get(`${BASE_URL}/`, {
       headers: { 'Accept': 'text/html' }
     });
-    
-    // Extract CSRF token from cookies or response
+
+    // Extract CSRF token from cookies
     const cookies = await jar.getCookies(BASE_URL);
     const xsrfCookie = cookies.find(c => c.key === 'XSRF-TOKEN');
     const csrfToken = xsrfCookie ? decodeURIComponent(xsrfCookie.value) : null;
@@ -78,7 +78,7 @@ async function doLogin() {
     }, { headers });
     console.log('[auth] Step 1 done');
 
-    // Refresh CSRF token after step 1
+    // Refresh CSRF after step 1
     const cookies2 = await jar.getCookies(BASE_URL);
     const xsrf2 = cookies2.find(c => c.key === 'XSRF-TOKEN');
     if (xsrf2) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf2.value);
@@ -90,7 +90,7 @@ async function doLogin() {
     }, { headers });
     console.log('[auth] Step 2 done');
 
-    // Refresh CSRF again
+    // Refresh CSRF after step 2
     const cookies3 = await jar.getCookies(BASE_URL);
     const xsrf3 = cookies3.find(c => c.key === 'XSRF-TOKEN');
     if (xsrf3) headers['X-XSRF-TOKEN'] = decodeURIComponent(xsrf3.value);
@@ -105,6 +105,24 @@ async function doLogin() {
   } catch (e) {
     console.error('[auth] Login failed:', e.response?.status, e.message);
     return false;
+  }
+}
+
+async function ensureAuth() {
+  const loaded = loadAuth();
+  if (!loaded) {
+    return await doLogin();
+  }
+  // Validate session
+  try {
+    await client.get(`${BASE_URL}/profile`, {
+      headers: { 'Accept': 'application/json' }
+    });
+    console.log('[auth] Session valid');
+    return true;
+  } catch (e) {
+    console.log('[auth] Session invalid, re-logging in...');
+    return await doLogin();
   }
 }
 
@@ -125,7 +143,6 @@ async function proxy(req, res, urlPath, options = {}) {
     if (response.status === 401 || response.status === 403) {
       console.log('[proxy] Auth expired, re-logging in...');
       await doLogin();
-      // Retry once
       const retry = await client({
         method,
         url,
@@ -194,7 +211,6 @@ app.get('/api/search', async (req, res) => {
 // ── Audio Streaming ───────────────────────────────────────────────────────────
 app.get('/api/audio/:id', async (req, res) => {
   try {
-    // Get the play URL (302 redirect to CDN)
     const playUrl = `${BASE_URL}/content/${req.params.id}/play?format=aac`;
     const redirect = await client.get(playUrl, {
       maxRedirects: 0,
@@ -202,8 +218,6 @@ app.get('/api/audio/:id', async (req, res) => {
     });
 
     const cdnUrl = redirect.headers?.location || playUrl;
-
-    // Pipe CDN audio with range support
     const rangeHeader = req.headers.range;
     const headers = { 'Accept': '*/*' };
     if (rangeHeader) headers['Range'] = rangeHeader;
@@ -215,8 +229,7 @@ app.get('/api/audio/:id', async (req, res) => {
     });
 
     res.status(audioResponse.status);
-    const passthroughHeaders = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
-    passthroughHeaders.forEach(h => {
+    ['content-type', 'content-length', 'content-range', 'accept-ranges'].forEach(h => {
       if (audioResponse.headers[h]) res.setHeader(h, audioResponse.headers[h]);
     });
     audioResponse.data.pipe(res);
@@ -226,7 +239,7 @@ app.get('/api/audio/:id', async (req, res) => {
   }
 });
 
-// Stream redirect (for direct browser use)
+// Stream redirect
 app.get('/api/stream/:id', async (req, res) => {
   try {
     const playUrl = `${BASE_URL}/content/${req.params.id}/play?format=aac`;
@@ -241,7 +254,7 @@ app.get('/api/stream/:id', async (req, res) => {
   }
 });
 
-// CDN image proxy (avoids mixed content / CORS)
+// CDN image proxy
 app.get('/api/img', async (req, res) => {
   try {
     const { url } = req.query;
@@ -267,7 +280,6 @@ app.get('*', (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 const server = http.createServer(app);
 
-// WebSocket for player state sync (future use)
 const wss = new WebSocket.Server({ server, path: '/ws/player' });
 wss.on('connection', ws => {
   console.log('[ws] Client connected');
