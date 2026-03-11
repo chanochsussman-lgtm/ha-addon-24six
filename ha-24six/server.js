@@ -285,46 +285,18 @@ app.delete('/api/library/favorites/:id', async (req, res) => {
 // ── Audio Streaming ───────────────────────────────────────────────────────────
 app.get('/api/audio/:id', async (req, res) => {
   try {
-    // Web cookie auth play URLs - correct order to try
-    const playUrls = [
-      `${BASE_URL}/content/${req.params.id}/play?format=aac`,
-      `${BASE_URL}/app/music/content/${req.params.id}/play`,
-      `${BASE_URL}/app/content/${req.params.id}/play`,
-    ];
+    const playUrl = `${BASE_URL}/app/content/${req.params.id}/play`;
+    const redirect = await client.get(playUrl, {
+      maxRedirects: 0,
+      validateStatus: s => s === 302 || s === 200
+    });
 
-    let cdnUrl = null;
-    for (const playUrl of playUrls) {
-      try {
-        console.log('[audio] trying:', playUrl);
-        const redirect = await client.get(playUrl, {
-          maxRedirects: 0,
-          validateStatus: s => s >= 200 && s < 400
-        });
-        console.log('[audio] status:', redirect.status, 'location:', redirect.headers?.location, 'data keys:', typeof redirect.data === 'object' ? Object.keys(redirect.data) : String(redirect.data).slice(0,100));
-        if (redirect.status === 302 && redirect.headers?.location) {
-          cdnUrl = redirect.headers.location;
-          break;
-        }
-        if (redirect.status === 200) {
-          const body = redirect.data;
-          const url = typeof body === 'object'
-            ? (body?.url || body?.audio_url || body?.stream_url || body?.src || body?.path || body?.file)
-            : null;
-          if (url) { cdnUrl = url; console.log('[audio] got url from body:', url); break; }
-          // Log all keys so we can find the right one
-          if (typeof body === 'object') console.log('[audio] 200 body keys:', JSON.stringify(body).slice(0, 300));
-        }
-      } catch (e) {
-        console.log('[audio] failed:', playUrl, e.response?.status || e.message);
-      }
-    }
-
+    const cdnUrl = redirect.headers?.location;
     if (!cdnUrl) {
-      console.error('[audio] no CDN URL found for id:', req.params.id);
-      return res.status(404).json({ error: 'No audio URL found' });
+      console.error('[audio] no redirect location for id:', req.params.id, 'status:', redirect.status);
+      return res.status(404).json({ error: 'No audio URL' });
     }
 
-    console.log('[audio] streaming from:', cdnUrl.slice(0, 80));
     const rangeHeader = req.headers.range;
     const headers = { 'Accept': '*/*' };
     if (rangeHeader) headers['Range'] = rangeHeader;
