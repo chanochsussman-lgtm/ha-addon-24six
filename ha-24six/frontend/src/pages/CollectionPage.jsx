@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { usePlayer } from '../store'
+import { usePlayer } from '../store/index.jsx'
 
 export default function CollectionPage() {
   const { id } = useParams()

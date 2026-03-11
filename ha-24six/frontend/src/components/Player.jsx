@@ -1,4 +1,4 @@
-import { usePlayer } from '../store'
+import { usePlayer } from '../store/index.jsx'
 
 function fmt(s) {
   if (!s || isNaN(s)) return '0:00'

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { PlayerProvider } from './store'
+import { PlayerProvider } from './store/index.jsx'
 import { api } from './api'
 import Sidebar from './components/Sidebar'
 import Player from './components/Player'
