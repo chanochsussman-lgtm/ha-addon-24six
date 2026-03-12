@@ -307,17 +307,41 @@ app.get('/api/audio/:id', async (req, res) => {
   }
 });
 
-// Stream redirect
+// ── Audio Stream Proxy (stable URL for WiiM/DLNA casting) ────────────────────
+// This endpoint fetches a fresh Mux URL and pipes audio — WiiM hits this directly
 app.get('/api/stream/:id', async (req, res) => {
   try {
-    const playUrl = `${BASE_URL}/app/content/${req.params.id}/play?format=aac`;
+    const playUrl = `${BASE_URL}/app/content/${req.params.id}/play`;
     const redirect = await client.get(playUrl, {
       maxRedirects: 0,
       validateStatus: s => s === 302 || s === 200
     });
-    const cdnUrl = redirect.headers?.location || playUrl;
-    res.redirect(cdnUrl);
+    const cdnUrl = redirect.headers?.location;
+    if (!cdnUrl) return res.status(404).json({ error: 'No stream URL' });
+
+    const rangeHeader = req.headers.range;
+    const upstream = await axios.get(cdnUrl, {
+      responseType: 'stream',
+      headers: {
+        'Accept': '*/*',
+        'User-Agent': 'Mozilla/5.0',
+        ...(rangeHeader ? { 'Range': rangeHeader } : {})
+      },
+      validateStatus: () => true
+    });
+
+    res.status(upstream.status);
+    // Force audio content-type so WiiM/DLNA accepts it
+    res.setHeader('Content-Type', upstream.headers['content-type'] || 'audio/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'no-cache');
+    if (upstream.headers['content-length'])  res.setHeader('Content-Length',  upstream.headers['content-length']);
+    if (upstream.headers['content-range'])   res.setHeader('Content-Range',   upstream.headers['content-range']);
+
+    req.on('close', () => upstream.data.destroy())
+    upstream.data.pipe(res);
   } catch (e) {
+    console.error('[stream] error:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -340,9 +364,27 @@ app.get('/api/img', async (req, res) => {
 
 
 // ── HA Media Players ──────────────────────────────────────────────────────────
-const HA_URL     = 'http://supervisor/core';
-const HA_TOKEN   = process.env.SUPERVISOR_TOKEN;
-const haHeaders  = () => ({ 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' });
+const HA_URL    = 'http://supervisor/core';
+const HA_TOKEN  = process.env.SUPERVISOR_TOKEN;
+const haHeaders = () => ({ 'Authorization': `Bearer ${HA_TOKEN}`, 'Content-Type': 'application/json' });
+
+// Detect addon's own LAN IP so WiiM can reach back to us
+async function getAddonStreamBase() {
+  try {
+    // HA supervisor tells us the addon hostname
+    const r = await axios.get('http://supervisor/addons/self/info', {
+      headers: { 'Authorization': `Bearer ${HA_TOKEN}` }
+    });
+    // Use HA host IP - addon is reachable at port 8484 on the HA host
+    const haInfo = await axios.get('http://supervisor/host/info', {
+      headers: { 'Authorization': `Bearer ${HA_TOKEN}` }
+    });
+    const ip = haInfo.data?.data?.hostname || 'homeassistant.local';
+    return `http://${ip}:${PORT}`;
+  } catch {
+    return `http://homeassistant.local:${PORT}`;
+  }
+}
 
 // List all media_player entities
 app.get('/api/ha/speakers', async (req, res) => {
@@ -354,8 +396,8 @@ app.get('/api/ha/speakers', async (req, res) => {
         entity_id: e.entity_id,
         name: e.attributes.friendly_name || e.entity_id,
         state: e.state,
-        volume: e.attributes.volume_level,
-        icon: e.attributes.entity_picture || null,
+        volume: e.attributes.volume_level ?? null,
+        platform: e.attributes.platform || null,
       }));
     res.json(players);
   } catch (e) {
@@ -364,31 +406,39 @@ app.get('/api/ha/speakers', async (req, res) => {
   }
 });
 
-// Cast a track to a HA media player
+// Cast a track to a HA media player using stable stream URL
 app.post('/api/ha/play', async (req, res) => {
   try {
-    const { entity_id, track_id } = req.body;
+    const { entity_id, track_id, track_title } = req.body;
     if (!entity_id || !track_id) return res.status(400).json({ error: 'entity_id and track_id required' });
 
-    // Get the Mux stream URL
-    const playUrl = `${BASE_URL}/app/content/${track_id}/play`;
-    const redirect = await client.get(playUrl, {
-      maxRedirects: 0,
-      validateStatus: s => s === 302 || s === 200
-    });
-    const streamUrl = redirect.headers?.location;
-    if (!streamUrl) return res.status(404).json({ error: 'No stream URL' });
+    // Build stable stream URL reachable by the media player on LAN
+    const base = await getAddonStreamBase();
+    const streamUrl = `${base}/api/stream/${track_id}`;
+    console.log('[ha] casting to', entity_id, 'url:', streamUrl);
 
-    // Tell HA to play it
+    // Wake device first if off (WiiM needs this)
+    const stateRes = await axios.get(`${HA_URL}/api/states/${entity_id}`, { headers: haHeaders() }).catch(() => null);
+    const state = stateRes?.data?.state;
+    if (state === 'off') {
+      await axios.post(`${HA_URL}/api/services/media_player/turn_on`, { entity_id }, { headers: haHeaders() }).catch(() => {});
+      await new Promise(r => setTimeout(r, 1500)); // wait for device to wake
+    }
+
+    // Play via HA service
     await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
       entity_id,
       media_content_id: streamUrl,
       media_content_type: 'music',
+      extra: {
+        title: track_title || 'Now Playing',
+        metadata: { mediaType: 3 } // MUSIC type for Chromecast/WiiM
+      }
     }, { headers: haHeaders() });
 
-    res.json({ ok: true, entity_id, stream: streamUrl.slice(0, 60) + '...' });
+    res.json({ ok: true, stream_url: streamUrl });
   } catch (e) {
-    console.error('[ha] play error:', e.message);
+    console.error('[ha] play error:', e.message, e.response?.data);
     res.status(500).json({ error: e.message });
   }
 });

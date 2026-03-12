@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 const Ctx = createContext(null)
 const audio = new Audio()
-audio.crossOrigin = 'use-credentials'
+// Do NOT set crossOrigin - Mux CDN URLs are cross-origin and don't need credentials
 
 export function PlayerProvider({ children }) {
   const [track, setTrack]       = useState(null)
@@ -14,6 +14,7 @@ export function PlayerProvider({ children }) {
   const [loading, setLoading]   = useState(false)
   const queueRef = useRef([])
   const qIdxRef  = useRef(0)
+  const _playRef = useRef(null)
 
   useEffect(() => { queueRef.current = queue }, [queue])
   useEffect(() => { qIdxRef.current = qIdx }, [qIdx])
@@ -28,7 +29,7 @@ export function PlayerProvider({ children }) {
     const onEnd   = () => {
       const q = queueRef.current
       const i = qIdxRef.current
-      if (i < q.length - 1) _play(q[i + 1], q, i + 1)
+      if (i < q.length - 1) _playRef.current?.(q[i + 1], q, i + 1)
     }
     audio.addEventListener('timeupdate', onTime)
     audio.addEventListener('durationchange', onDur)
@@ -48,40 +49,48 @@ export function PlayerProvider({ children }) {
     }
   }, [])
 
-  const _play = async (t, q, i) => {
+  const _play = useCallback(async (t, q, i) => {
     setTrack(t)
     setQueue(q)
     setQIdx(i)
     queueRef.current = q
     qIdxRef.current = i
     setLoading(true)
+    setProgress(0)
+    setDuration(0)
+
     try {
       const base = window.ingressPath || ''
-      const res = await fetch(`${base}/api/audio/${t.id}`)
+      const res  = await fetch(`${base}/api/audio/${t.id}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
-      const url = data?.url || data
-      if (!url || typeof url !== 'string') throw new Error('No URL in response')
+      const url  = typeof data === 'string' ? data : data?.url
+      if (!url) throw new Error('No URL in response: ' + JSON.stringify(data))
+
+      console.log('[player] src:', url.slice(0, 80))
       audio.src = url
-      await audio.play()
+      audio.load()
+      const playPromise = audio.play()
+      if (playPromise) await playPromise
     } catch (e) {
-      console.error('[player] play error:', e)
+      console.error('[player] error:', e.message)
       setLoading(false)
     }
+
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: t.title, artist: t.artist || '',
-        artwork: t.img ? [{ src: t.img }] : []
+        artwork: t.img ? [{ src: t.img, sizes: '512x512', type: 'image/jpeg' }] : []
       })
     }
-  }
-
-  const playTrack = useCallback((t, q = [], i = 0) => _play(t, q.length ? q : [t], i), [])
-
-  const togglePlay = useCallback(() => {
-    audio.paused ? audio.play() : audio.pause()
   }, [])
 
-  const seek = useCallback(t => { audio.currentTime = t }, [])
+  // Keep ref in sync so the ended handler can call it
+  useEffect(() => { _playRef.current = _play }, [_play])
+
+  const playTrack = useCallback((t, q = [], i = 0) => _play(t, q.length ? q : [t], i), [_play])
+  const togglePlay = useCallback(() => { audio.paused ? audio.play() : audio.pause() }, [])
+  const seek = useCallback(s => { audio.currentTime = s }, [])
 
   const playNext = useCallback((songToInsert) => {
     if (songToInsert) {
@@ -96,28 +105,24 @@ export function PlayerProvider({ children }) {
       const i = qIdxRef.current
       if (i < q.length - 1) _play(q[i + 1], q, i + 1)
     }
-  }, [])
+  }, [_play])
 
   const playPrev = useCallback(() => {
     if (audio.currentTime > 3) { seek(0); return }
     const q = queueRef.current
     const i = qIdxRef.current
     if (i > 0) _play(q[i - 1], q, i - 1)
-  }, [seek])
+  }, [_play, seek])
 
   const addToQueue = useCallback((song) => {
-    setQueue(q => {
-      const next = [...q, song]
-      queueRef.current = next
-      return next
-    })
+    setQueue(q => { const n = [...q, song]; queueRef.current = n; return n })
   }, [])
 
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
-    navigator.mediaSession.setActionHandler('play', () => audio.play())
-    navigator.mediaSession.setActionHandler('pause', () => audio.pause())
-    navigator.mediaSession.setActionHandler('nexttrack', () => playNext())
+    navigator.mediaSession.setActionHandler('play',          () => audio.play())
+    navigator.mediaSession.setActionHandler('pause',         () => audio.pause())
+    navigator.mediaSession.setActionHandler('nexttrack',     () => playNext())
     navigator.mediaSession.setActionHandler('previoustrack', playPrev)
   }, [playNext, playPrev])
 
