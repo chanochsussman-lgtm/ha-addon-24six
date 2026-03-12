@@ -466,13 +466,294 @@ app.get('*', (req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 const server = http.createServer(app);
 
+// ── HA WebSocket bridge ───────────────────────────────────────────────────────
+// Connects to HA WS API, subscribes to state_changed events for media_player entities,
+// and fans them out to all connected frontend clients instantly (no polling).
 const wss = new WebSocket.Server({ server, path: '/ws/player' });
-wss.on('connection', ws => {
-  console.log('[ws] Client connected');
-  ws.on('close', () => console.log('[ws] Client disconnected'));
+
+let haWs = null;
+let haWsReady = false;
+let haWsQueue = [];
+let haMsgId = 1;
+const haCallbacks = {};          // msgId → resolve fn for request/response
+const subscribedEntities = new Set();
+
+function haWsSend(obj) {
+  if (haWsReady && haWs && haWs.readyState === WebSocket.OPEN) {
+    haWs.send(JSON.stringify(obj));
+  } else {
+    haWsQueue.push(obj);
+  }
+}
+
+function connectHAWebSocket() {
+  const wsUrl = (HA_URL || 'http://supervisor/core').replace(/^http/, 'ws') + '/api/websocket';
+  console.log('[ha-ws] Connecting to', wsUrl);
+  haWs = new WebSocket(wsUrl);
+
+  haWs.on('open', () => console.log('[ha-ws] Connected'));
+
+  haWs.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+
+    if (msg.type === 'auth_required') {
+      haWs.send(JSON.stringify({ type: 'auth', access_token: HA_TOKEN }));
+      return;
+    }
+    if (msg.type === 'auth_ok') {
+      console.log('[ha-ws] Authenticated');
+      haWsReady = true;
+      // Flush queued messages
+      haWsQueue.forEach(m => haWs.send(JSON.stringify(m)));
+      haWsQueue = [];
+      // Subscribe to ALL state_changed events for media_player domain
+      const id = haMsgId++;
+      haWs.send(JSON.stringify({
+        id,
+        type: 'subscribe_events',
+        event_type: 'state_changed',
+      }));
+      return;
+    }
+    if (msg.type === 'auth_invalid') {
+      console.error('[ha-ws] Auth failed');
+      return;
+    }
+
+    // Resolve pending request/response callbacks
+    if (msg.id && haCallbacks[msg.id]) {
+      haCallbacks[msg.id](msg);
+      delete haCallbacks[msg.id];
+      return;
+    }
+
+    // Fan out state_changed events for media_player entities to frontend clients
+    if (msg.type === 'event' && msg.event?.event_type === 'state_changed') {
+      const ed = msg.event.data;
+      const entity_id = ed?.entity_id || '';
+      if (!entity_id.startsWith('media_player.')) return;
+
+      const ns = ed.new_state;
+      if (!ns) return;
+
+      const attrs = ns.attributes || {};
+      const payload = JSON.stringify({
+        type: 'speaker_state',
+        entity_id,
+        state:    ns.state,
+        volume:   attrs.volume_level,
+        position: attrs.media_position,
+        duration: attrs.media_duration,
+        title:    attrs.media_title,
+        artist:   attrs.media_artist,
+      });
+
+      // Broadcast to all connected frontend clients
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(payload);
+        }
+      });
+    }
+  });
+
+  haWs.on('close', () => {
+    console.log('[ha-ws] Disconnected — reconnecting in 3s');
+    haWsReady = false;
+    setTimeout(connectHAWebSocket, 3000);
+  });
+
+  haWs.on('error', (e) => {
+    console.error('[ha-ws] Error:', e.message);
+  });
+}
+
+// Start the HA WS connection after server boots
+connectHAWebSocket();
+
+wss.on('connection', (ws) => {
+  console.log('[ws] Frontend client connected');
+  ws.on('close', () => console.log('[ws] Frontend client disconnected'));
+  ws.on('error', () => {});
 });
+
+
+
+// ── Cast metadata (push title/artist/artwork to HA speaker) ──────────────────
+app.post('/api/ha/cast-metadata', async (req, res) => {
+  const { entity_id, title, artist, album, img } = req.body
+  if (!entity_id) return res.status(400).json({ error: 'entity_id required' })
+  try {
+    // Use media_player.play_media with announce=false just to push metadata
+    // Most integrations (WiiM/LinkPlay, Sonos, Cast) surface this in their native app
+    await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
+      entity_id,
+      media_content_id: img || '',
+      media_content_type: 'image/jpeg',
+      extra: { title, artist, album, thumb: img }
+    }, { headers: haHeaders() }).catch(() => {})
+    // Also update media_player attributes via metadata service if available
+    await axios.post(`${HA_URL}/api/services/media_player/shuffle_set`, {
+      entity_id, shuffle: false
+    }, { headers: haHeaders() }).catch(() => {})
+    res.json({ ok: true })
+  } catch (e) { res.json({ ok: false, error: e.message }) }
+})
+
+// ── Speaker state (for polling remote control changes) ───────────────────────
+app.get('/api/ha/speaker-state/:entity_id', async (req, res) => {
+  try {
+    const r = await axios.get(
+      `${HA_URL}/api/states/${req.params.entity_id}`,
+      { headers: haHeaders() }
+    )
+    const attrs = r.data.attributes || {}
+    res.json({
+      state:    r.data.state,
+      position: attrs.media_position,
+      duration: attrs.media_duration,
+      title:    attrs.media_title,
+      volume:   attrs.volume_level,
+    })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+// ── Remote control passthrough (play/pause/seek on cast speaker) ─────────────
+app.post('/api/ha/control', async (req, res) => {
+  const { entity_id, action, position } = req.body
+  if (!entity_id || !action) return res.status(400).json({ error: 'entity_id + action required' })
+  const serviceMap = {
+    play:  'media_play',
+    pause: 'media_pause',
+    stop:  'media_stop',
+    next:  'media_next_track',
+    prev:  'media_previous_track',
+  }
+  try {
+    if (action === 'seek' && position != null) {
+      await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
+        entity_id, seek_position: position
+      }, { headers: haHeaders() })
+    } else if (serviceMap[action]) {
+      await axios.post(`${HA_URL}/api/services/media_player/${serviceMap[action]}`, {
+        entity_id
+      }, { headers: haHeaders() })
+    } else {
+      return res.status(400).json({ error: `Unknown action: ${action}` })
+    }
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ error: e.message }) }
+})
+
+
+// ── Player state API (for Lovelace card polling) ─────────────────────────────
+// In-memory player state — updated by frontend via POST /api/player/update
+let playerState = { title: null, artist: null, img: null, playing: false, progress: 0, duration: 0, updatedAt: 0 }
+
+app.get('/api/player/state', (req, res) => {
+  res.json({ type: 'player_state', ...playerState })
+})
+
+// Frontend posts its current state here so the card can reflect it
+app.post('/api/player/update', (req, res) => {
+  playerState = { ...playerState, ...req.body, updatedAt: Date.now() }
+  // Broadcast to all WS clients (Lovelace cards)
+  const payload = JSON.stringify({ type: 'player_state', ...playerState })
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) client.send(payload)
+  })
+  res.json({ ok: true })
+})
+
+// Lovelace card sends control actions here
+app.post('/api/player/control', (req, res) => {
+  const { action } = req.body
+  if (!action) return res.status(400).json({ error: 'action required' })
+  // Broadcast control command to all frontend WS clients
+  const payload = JSON.stringify({ type: 'player_control', action })
+  wss.clients.forEach(client => {
+    if (client.readyState === 1) client.send(payload)
+  })
+  res.json({ ok: true })
+})
 
 server.listen(PORT, async () => {
   console.log(`[server] 24Six running on port ${PORT}`);
   await ensureAuth();
 });
+
+// ── Speaker Presets (stored in /data/presets.json) ────────────────────────────
+const PRESETS_FILE = '/data/presets.json'
+function loadPresets() {
+  try { return JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8')) } catch { return [] }
+}
+function savePresets(p) { fs.writeFileSync(PRESETS_FILE, JSON.stringify(p, null, 2)) }
+
+app.get('/api/ha/presets', (req, res) => res.json(loadPresets()))
+
+app.post('/api/ha/presets', (req, res) => {
+  const presets = loadPresets()
+  const preset = { id: Date.now().toString(), ...req.body }
+  presets.push(preset)
+  savePresets(presets)
+  res.json(preset)
+})
+
+app.put('/api/ha/presets/:id', (req, res) => {
+  const presets = loadPresets().map(p => p.id === req.params.id ? { ...p, ...req.body } : p)
+  savePresets(presets)
+  res.json({ ok: true })
+})
+
+app.delete('/api/ha/presets/:id', (req, res) => {
+  savePresets(loadPresets().filter(p => p.id !== req.params.id))
+  res.json({ ok: true })
+})
+
+// Play to a preset group (cast to all speakers in group simultaneously)
+app.post('/api/ha/presets/:id/play', async (req, res) => {
+  const preset = loadPresets().find(p => p.id === req.params.id)
+  if (!preset) return res.status(404).json({ error: 'Preset not found' })
+  const { track_id, track_title } = req.body
+  if (!track_id) return res.status(400).json({ error: 'track_id required' })
+
+  const base = await getAddonStreamBase()
+  const streamUrl = `${base}/api/stream/${track_id}`
+
+  const results = await Promise.allSettled(
+    preset.entity_ids.map(entity_id =>
+      axios.post(`${HA_URL}/api/services/media_player/play_media`, {
+        entity_id,
+        media_content_id: streamUrl,
+        media_content_type: 'music',
+        extra: { title: track_title || 'Now Playing' }
+      }, { headers: haHeaders() })
+    )
+  )
+  res.json({ ok: true, results: results.map((r, i) => ({ entity_id: preset.entity_ids[i], ok: r.status === 'fulfilled' })) })
+})
+
+// Sync volume across a preset group
+app.post('/api/ha/presets/:id/volume', async (req, res) => {
+  const preset = loadPresets().find(p => p.id === req.params.id)
+  if (!preset) return res.status(404).json({ error: 'Preset not found' })
+  const { volume } = req.body
+  await Promise.allSettled(
+    preset.entity_ids.map(entity_id =>
+      axios.post(`${HA_URL}/api/services/media_player/volume_set`, { entity_id, volume_level: volume }, { headers: haHeaders() })
+    )
+  )
+  res.json({ ok: true })
+})
+
+// Speaker hidden/visible preferences
+const SPEAKER_PREFS_FILE = '/data/speaker_prefs.json'
+function loadSpeakerPrefs() { try { return JSON.parse(fs.readFileSync(SPEAKER_PREFS_FILE, 'utf8')) } catch { return {} } }
+function saveSpeakerPrefs(p) { fs.writeFileSync(SPEAKER_PREFS_FILE, JSON.stringify(p, null, 2)) }
+
+app.get('/api/ha/speaker-prefs', (req, res) => res.json(loadSpeakerPrefs()))
+app.post('/api/ha/speaker-prefs', (req, res) => {
+  saveSpeakerPrefs(req.body)
+  res.json({ ok: true })
+})
