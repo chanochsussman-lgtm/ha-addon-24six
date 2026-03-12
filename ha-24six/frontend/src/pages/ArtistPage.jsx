@@ -113,7 +113,7 @@ export default function ArtistPage() {
       {/* Hero */}
       <div style={{ background:`linear-gradient(180deg, ${color}cc 0%, var(--bg) 100%)`, padding:'14px 16px 28px' }}>
         <button onClick={() => nav(-1)} style={{ background:'rgba(0,0,0,0.35)', borderRadius:'50%', width:34, height:34, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path resp_artistpage="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         </button>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginTop:14, gap:12 }}>
           <div style={{ width:130, height:130, borderRadius:'50%', overflow:'hidden', background:'var(--card)', boxShadow:'0 8px 32px rgba(0,0,0,0.6)', flexShrink:0 }}>
@@ -133,7 +133,7 @@ export default function ArtistPage() {
           {allTracks.length > 0 && (
             <button onClick={() => playTrack(allTracks[0], allTracks, 0)}
               style={{ background:'var(--accent)', color:'#000', fontWeight:700, fontSize:13, padding:'9px 26px', borderRadius:30, display:'flex', alignItems:'center', gap:6, border:'none', cursor:'pointer' }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="#000"><path resp_artistpage="M8 5v14l11-7z"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="#000"><path d="M8 5v14l11-7z"/></svg>
               Play All
             </button>
           )}

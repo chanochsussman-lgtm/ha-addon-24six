@@ -11,7 +11,7 @@ function log(label, _ld) {
   if (!_ld) { console.log(`[${label}] null response`); return }
   console.log(`[${label}] keys:`, Object.keys(_ld))
   // Log each key's shape
-  Object.entries(_ld).forEach(([k, v]) => {
+  Object.entries(raw).forEach(([k, v]) => {
     if (Array.isArray(v))
       console.log(`[${label}]  .${k} = array[${v.length}]`, v[0] ? Object.keys(v[0]) : '')
     else if (v && typeof v === 'object')
@@ -110,7 +110,7 @@ export function extractHome(raw) {
   }
 
   // Every other array key — fully dynamic, zero hardcoding
-  Object.entries(_ld).forEach(([k, v]) => {
+  Object.entries(raw).forEach(([k, v]) => {
     if (skip.has(k) || !Array.isArray(v)) return
     const vv = v.filter(Boolean)  // strip null/undefined slots (e.g. myPlaylists: [,...])
     if (!vv.length || !vv[0]?.id) return

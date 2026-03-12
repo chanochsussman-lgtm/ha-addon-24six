@@ -503,51 +503,103 @@ app.get('/api/ha/speakers', async (req, res) => {
 });
 
 // Cast a track to a HA media player using stable stream URL
+// ── Speaker group state ──────────────────────────────────────────────────────
+// Tracks which HA speakers are currently playing together (synced group)
+let speakerGroup = {
+  entities: [],      // array of entity_id strings currently in the group
+  trackId: null,     // current track id
+  streamUrl: null,   // current stream url
+  startedAt: null,   // Date.now() when track started playing
+  position: 0,       // position (seconds) when track started
+}
+let syncTimer = null
+
+function groupPosition() {
+  if (!speakerGroup.startedAt) return speakerGroup.position
+  return speakerGroup.position + (Date.now() - speakerGroup.startedAt) / 1000
+}
+
+function startSyncLoop() {
+  if (syncTimer) clearInterval(syncTimer)
+  if (speakerGroup.entities.length < 2) return // no need to sync single speaker
+  syncTimer = setInterval(async () => {
+    if (speakerGroup.entities.length < 2 || !speakerGroup.streamUrl) return
+    const pos = Math.floor(groupPosition())
+    console.log('[sync] re-syncing group', speakerGroup.entities, 'at', pos, 's')
+    for (const eid of speakerGroup.entities) {
+      await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
+        entity_id: eid, seek_position: pos
+      }, { headers: haHeaders() }).catch(() => {})
+    }
+  }, 30000) // sync every 30s
+}
+
+async function playOnSpeaker(entity_id, streamUrl, position, track_title) {
+  // Wake device if off
+  const stateRes = await axios.get(`${HA_URL}/api/states/${entity_id}`, { headers: haHeaders() }).catch(() => null)
+  if (stateRes?.data?.state === 'off') {
+    await axios.post(`${HA_URL}/api/services/media_player/turn_on`, { entity_id }, { headers: haHeaders() }).catch(() => {})
+    await new Promise(r => setTimeout(r, 1500))
+  }
+  // Start playback
+  await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
+    entity_id,
+    media_content_id: streamUrl,
+    media_content_type: 'music',
+    extra: { title: track_title || 'Now Playing', metadata: { mediaType: 3 } }
+  }, { headers: haHeaders() })
+  // Seek to position
+  if (position && position > 2) {
+    await new Promise(r => setTimeout(r, 2500))
+    await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
+      entity_id, seek_position: position
+    }, { headers: haHeaders() }).catch(() => {})
+  }
+}
+
 app.post('/api/ha/play', async (req, res) => {
   try {
-    // Accept content_id (new) or track_id (legacy)
-    const { entity_id, content_id, track_id, track_title, position } = req.body;
+    const { entity_id, content_id, track_id, track_title, position, join } = req.body;
     const id = content_id || track_id;
     if (!entity_id || !id) return res.status(400).json({ error: 'entity_id and content_id required' });
 
-    // Build stable stream URL — include position as query param for seek-on-start
     const base = await getAddonStreamBase();
     const streamUrl = `${base}/api/stream/${id}`;
-    console.log('[ha] casting to', entity_id, 'track:', id, position ? `at ${position}s` : '');
+    const pos = position || 0
 
-    // Wake device first if off
-    const stateRes = await axios.get(`${HA_URL}/api/states/${entity_id}`, { headers: haHeaders() }).catch(() => null);
-    const state = stateRes?.data?.state;
-    if (state === 'off') {
-      await axios.post(`${HA_URL}/api/services/media_player/turn_on`, { entity_id }, { headers: haHeaders() }).catch(() => {});
-      await new Promise(r => setTimeout(r, 1500));
-    }
-
-    // Play via HA
-    await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
-      entity_id,
-      media_content_id: streamUrl,
-      media_content_type: 'music',
-      extra: {
-        title: track_title || 'Now Playing',
-        metadata: { mediaType: 3 }
+    if (join) {
+      // JOIN MODE: add this speaker to the current group, sync to group position
+      const syncPos = Math.floor(groupPosition())
+      console.log('[ha] joining group — adding', entity_id, 'at', syncPos, 's')
+      await playOnSpeaker(entity_id, speakerGroup.streamUrl || streamUrl, syncPos, track_title)
+      if (!speakerGroup.entities.includes(entity_id)) {
+        speakerGroup.entities.push(entity_id)
       }
-    }, { headers: haHeaders() });
-
-    // Seek to exact position if provided (let player buffer first)
-    if (position && position > 2) {
-      await new Promise(r => setTimeout(r, 2500));
-      await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
-        entity_id, seek_position: position
-      }, { headers: haHeaders() }).catch(() => {});
-      console.log('[ha] seeked to', position, 'on', entity_id);
+      startSyncLoop()
+    } else {
+      // SWITCH MODE: clear group, play only on this speaker
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null }
+      console.log('[ha] switching playback to', entity_id, 'track:', id, pos ? `at ${pos}s` : '')
+      await playOnSpeaker(entity_id, streamUrl, pos, track_title)
+      speakerGroup = {
+        entities: [entity_id],
+        trackId: id,
+        streamUrl,
+        startedAt: Date.now() - (pos * 1000),
+        position: pos,
+      }
     }
 
-    res.json({ ok: true, stream_url: streamUrl });
+    res.json({ ok: true, stream_url: streamUrl, group: speakerGroup.entities });
   } catch (e) {
     console.error('[ha] play error:', e.message, e.response?.data);
     res.status(500).json({ error: e.message });
   }
+});
+
+// Expose current group state for debugging / frontend awareness
+app.get('/api/ha/speaker-group', (req, res) => {
+  res.json({ entities: speakerGroup.entities, trackId: speakerGroup.trackId, position: Math.floor(groupPosition()) })
 });
 
 // Set volume
@@ -760,7 +812,13 @@ app.get('/api/ha/speaker-state/:entity_id', async (req, res) => {
 // ── Remote control passthrough (play/pause/seek on cast speaker) ─────────────
 app.post('/api/ha/control', async (req, res) => {
   const { entity_id, action, position } = req.body
-  if (!entity_id || !action) return res.status(400).json({ error: 'entity_id + action required' })
+  if (!action) return res.status(400).json({ error: 'action required' })
+
+  // If entity is in the group and group has multiple speakers, broadcast to all
+  const targets = (entity_id && speakerGroup.entities.includes(entity_id) && speakerGroup.entities.length > 1)
+    ? speakerGroup.entities
+    : (entity_id ? [entity_id] : speakerGroup.entities.length ? speakerGroup.entities : [entity_id])
+
   const serviceMap = {
     play:  'media_play',
     pause: 'media_pause',
@@ -768,19 +826,25 @@ app.post('/api/ha/control', async (req, res) => {
     next:  'media_next_track',
     prev:  'media_previous_track',
   }
+
   try {
-    if (action === 'seek' && position != null) {
-      await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
-        entity_id, seek_position: position
-      }, { headers: haHeaders() })
-    } else if (serviceMap[action]) {
-      await axios.post(`${HA_URL}/api/services/media_player/${serviceMap[action]}`, {
-        entity_id
-      }, { headers: haHeaders() })
-    } else {
-      return res.status(400).json({ error: `Unknown action: ${action}` })
+    for (const eid of targets) {
+      if (action === 'seek' && position != null) {
+        await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
+          entity_id: eid, seek_position: position
+        }, { headers: haHeaders() }).catch(() => {})
+        if (speakerGroup.entities.includes(eid)) {
+          speakerGroup.position = position
+          speakerGroup.startedAt = Date.now()
+        }
+      } else if (serviceMap[action]) {
+        await axios.post(`${HA_URL}/api/services/media_player/${serviceMap[action]}`, {
+          entity_id: eid
+        }, { headers: haHeaders() }).catch(() => {})
+      }
     }
-    res.json({ ok: true })
+    if (targets.length > 1) console.log('[ha] control', action, 'broadcast to group:', targets)
+    res.json({ ok: true, targets })
   } catch (e) { res.status(500).json({ error: e.message }) }
 })
 
@@ -804,16 +868,37 @@ app.post('/api/player/update', (req, res) => {
   res.json({ ok: true })
 })
 
-// Lovelace card sends control actions here
+// Lovelace card + HA integration send control actions here
 app.post('/api/player/control', (req, res) => {
-  const { action } = req.body
+  const { action, track_id, queue, volume, mute, entity_id, position } = req.body
   if (!action) return res.status(400).json({ error: 'action required' })
-  // Broadcast control command to all frontend WS clients
-  const payload = JSON.stringify({ type: 'player_control', action })
+
+  let payload
+
+  if (action === 'play_track' && track_id) {
+    // Tell frontend to play a specific track (from Media Browser)
+    payload = JSON.stringify({ type: 'player_control', action: 'play_track', track_id, queue: queue || [] })
+  } else if (action === 'volume') {
+    payload = JSON.stringify({ type: 'player_control', action: 'volume', volume })
+  } else if (action === 'mute') {
+    payload = JSON.stringify({ type: 'player_control', action: 'mute', mute })
+  } else if (action === 'set_speaker') {
+    // Switch active speaker
+    payload = JSON.stringify({ type: 'player_control', action: 'set_speaker', entity_id: entity_id || 'local' })
+  } else if (action === 'seek' && position != null) {
+    payload = JSON.stringify({ type: 'player_control', action: 'seek', position })
+  } else {
+    // play, pause, next, prev, stop
+    payload = JSON.stringify({ type: 'player_control', action })
+  }
+
+  // Broadcast to all connected frontend WS clients
+  let sent = 0
   wss.clients.forEach(client => {
-    if (client.readyState === 1) client.send(payload)
+    if (client.readyState === 1) { client.send(payload); sent++ }
   })
-  res.json({ ok: true })
+  console.log(`[control] action=${action} broadcast to ${sent} clients`)
+  res.json({ ok: true, sent })
 })
 
 server.listen(PORT, async () => {

@@ -48,20 +48,20 @@ function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName, 
           {/* Mute button */}
           <button onClick={toggleMute} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center', opacity: muted ? 1 : 0.5 }}>
             {muted
-              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-              : <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+              : <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
             }
           </button>
           {/* Speaker name — tappable, opens dock */}
           <button onClick={onOpenDock} style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 6px', borderRadius:6, display:'flex', alignItems:'center', gap:5,
             background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
-              <path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+              <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
             </svg>
             <span style={{ fontSize:10, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:0.8 }}>
               {muted ? 'MUTED — ' : ''}{activeSpeakerName}
             </span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)"><path resp_player="M7 10l5 5 5-5z"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)"><path d="M7 10l5 5 5-5z"/></svg>
           </button>
         </div>
         <span style={{ fontSize:12, color: muted ? 'var(--muted)' : 'var(--accent)', fontWeight:700 }}>
@@ -79,119 +79,165 @@ function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName, 
 
 
 // ── Inline speaker strip (always visible in full player) ─────────────────────
+function SpeakerMenu({ sp, onClose, castTo, joinTo }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) onClose() }
+    document.addEventListener('mousedown', handler)
+    document.addEventListener('touchstart', handler)
+    return () => { document.removeEventListener('mousedown', handler); document.removeEventListener('touchstart', handler) }
+  }, [onClose])
+
+  const items = [
+    { label: 'Switch playback here', sub: 'Stop other speakers, play on this one', action: () => { castTo(sp); onClose() } },
+    { label: 'Join current playback', sub: 'Add this speaker alongside active ones', action: () => { joinTo(sp); onClose() } },
+  ]
+
+  return (
+    <div ref={ref} style={{
+      position:'absolute', right:8, top:36, zIndex:999,
+      background:'var(--surface)', border:'1px solid var(--border)',
+      borderRadius:10, overflow:'hidden', minWidth:210,
+      boxShadow:'0 8px 32px rgba(0,0,0,0.6)'
+    }}>
+      <div style={{ padding:'8px 12px 4px', fontSize:10, color:'var(--muted)', textTransform:'uppercase', letterSpacing:0.8 }}>{sp.name}</div>
+      {items.map(item => (
+        <button key={item.label} onClick={item.action} style={{
+          display:'block', width:'100%', textAlign:'left',
+          background:'none', border:'none', cursor:'pointer',
+          padding:'9px 14px', color:'var(--text)'
+        }}
+          onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+          onMouseLeave={e => e.currentTarget.style.background='none'}
+        >
+          <div style={{ fontSize:13, fontWeight:500 }}>{item.label}</div>
+          <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:2 }}>{item.sub}</div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function InlineSpeakerStrip() {
-  const [speakers, setSpeakers]   = useState([])
-  const [expanded, setExpanded]   = useState(false)
+  const [speakers, setSpeakers] = useState([])
+  const [expanded, setExpanded] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(null)
   const { track, playing, progress, activeSpeaker, setCastTarget, applyVolume } = usePlayer()
   const base = window.ingressPath || ''
 
-  useEffect(() => {
+  const loadSpeakers = () => {
     fetch(`${base}/api/ha/speakers`)
       .then(r => r.json())
-      .then(resp_player => setSpeakers(Array.isArray(resp_player) ? resp_player : resp_player?.speakers || []))
+      .then(data => {
+        const list = Array.isArray(data) ? data : data?.speakers || []
+        setSpeakers(list.filter(sp => sp.hidden !== true && sp.visible !== false))
+      })
       .catch(() => {})
-  }, [])
+  }
 
-  // Poll every 10s
-  useEffect(() => {
-    const t = setInterval(() => {
-      fetch(`${base}/api/ha/speakers`)
-        .then(r => r.json())
-        .then(resp_player => setSpeakers(Array.isArray(resp_player) ? resp_player : resp_player?.speakers || []))
-        .catch(() => {})
-    }, 10000)
-    return () => clearInterval(t)
-  }, [])
+  useEffect(() => { loadSpeakers() }, [])
+  useEffect(() => { const t = setInterval(loadSpeakers, 10000); return () => clearInterval(t) }, [])
 
   const castTo = async (sp) => {
     setCastTarget(sp.entity_id, sp.name)
-    if (track) {
-      // Sync: send current track + seek position
-      await fetch(`${base}/api/ha/play`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entity_id: sp.entity_id,
-          content_id: track.id,
-          content_type: 'music',
-          position: Math.floor(progress || 0),
-        })
-      }).catch(() => {})
-    }
+    if (!track) return
+    await fetch(`${base}/api/ha/play`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_id: sp.entity_id, content_id: track.id, content_type: 'music', position: Math.floor(progress || 0) })
+    }).catch(() => {})
+  }
+
+  const joinTo = async (sp) => {
+    if (!track) return
+    await fetch(`${base}/api/ha/play`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_id: sp.entity_id, content_id: track.id, content_type: 'music', position: Math.floor(progress || 0), join: true })
+    }).catch(() => {})
   }
 
   const setVol = async (entityId, vol) => {
     if (entityId === 'local') { applyVolume(vol); return }
     await fetch(`${base}/api/ha/volume`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entity_id: entityId, volume_level: vol })
     }).catch(() => {})
   }
 
-  const allSpeakers = [
-    { entity_id: 'local', name: 'This Device', state: playing ? 'playing' : 'paused', volume_level: null },
-    ...speakers
-  ]
-
-  const PREVIEW = 2  // show 2 speakers collapsed, expand to show all
-  const shown = expanded ? allSpeakers : allSpeakers.slice(0, PREVIEW)
+  const thisDevice = { entity_id: 'local', name: 'This Device', state: playing ? 'playing' : 'paused', volume_level: null }
+  const allSpeakers = [thisDevice, ...speakers]
+  const shown = expanded ? allSpeakers : allSpeakers.slice(0, 3)
+  const albumArt = track?.img ? `${base}/api/img?url=${encodeURIComponent(track.img)}` : null
 
   return (
     <div style={{ marginTop:16, borderTop:'1px solid var(--border)', paddingTop:14 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
         <span style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:0.8 }}>Speakers</span>
-        {allSpeakers.length > PREVIEW && (
-          <button onClick={() => setExpanded(e=>!e)}
+        {allSpeakers.length > 3 && (
+          <button onClick={() => setExpanded(e => !e)}
             style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', fontSize:11, padding:0 }}>
-            {expanded ? 'Show less ▲' : `+${allSpeakers.length - PREVIEW} more ▼`}
+            {expanded ? 'Show less ▲' : `+${allSpeakers.length - 3} more ▼`}
           </button>
         )}
       </div>
+
       <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
         {shown.map(sp => {
-          const isActive = activeSpeaker ? sp.entity_id === activeSpeaker : sp.entity_id === 'local'
+          const isActive = (activeSpeaker || 'local') === sp.entity_id
+          const art = sp.entity_id === 'local' ? albumArt : (sp.media_image_url || albumArt)
           return (
-            <div key={sp.entity_id}
-              style={{ background: isActive ? 'rgba(200,168,75,0.1)' : 'rgba(255,255,255,0.04)',
-                border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                borderRadius:10, padding:'10px 12px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                <div style={{ width:30, height:30, borderRadius:7, background: isActive ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
-                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill={isActive ? 'var(--accent)' : 'rgba(255,255,255,0.4)'}>
-                    {sp.entity_id === 'local'
-                      ? <path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                      : <path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
-                    }
-                  </svg>
+            <div key={sp.entity_id} style={{
+              background: isActive ? 'rgba(200,168,75,0.1)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+              borderRadius:12, overflow:'hidden', position:'relative'
+            }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px' }}>
+                {/* Album art */}
+                <div style={{ width:40, height:40, borderRadius:8, overflow:'hidden', background:'var(--card)', flexShrink:0, position:'relative' }}>
+                  {art
+                    ? <img src={art} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill={isActive ? 'var(--accent)' : 'rgba(255,255,255,0.35)'}>
+                          {sp.entity_id === 'local'
+                            ? <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                            : <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+                          }
+                        </svg>
+                      </div>
+                  }
+                  {isActive && (
+                    <div style={{ position:'absolute', bottom:2, right:2, width:8, height:8, borderRadius:'50%', background:'var(--accent)', border:'1px solid var(--bg)' }} />
+                  )}
                 </div>
+
+                {/* Name + state */}
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight: isActive?600:400, color: isActive?'var(--accent)':'var(--text)',
-                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{sp.name}</div>
-                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1 }}>
-                    {sp.state === 'playing' ? '▶ Playing' : sp.state === 'paused' ? '⏸ Paused' : sp.state || 'Idle'}
+                  <div style={{ fontSize:13, fontWeight:isActive?600:400, color:isActive?'var(--accent)':'var(--text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {sp.name}
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:1 }}>
+                    {sp.state === 'playing' ? '▶ Playing' : sp.state === 'paused' ? '⏸ Paused' : sp.state === 'idle' ? 'Idle' : sp.state || ''}
                   </div>
                 </div>
-                {!isActive && (
-                  <button onClick={() => castTo(sp)}
-                    style={{ background:'var(--accent)', color:'#000', fontSize:10, fontWeight:700,
-                      padding:'4px 10px', borderRadius:8, border:'none', cursor:'pointer', flexShrink:0 }}>
-                    CAST
-                  </button>
-                )}
+
                 {isActive && (
-                  <span style={{ fontSize:9, background:'var(--accent)', color:'#000', fontWeight:700,
-                    padding:'2px 7px', borderRadius:8, flexShrink:0 }}>ACTIVE</span>
+                  <span style={{ fontSize:9, background:'var(--accent)', color:'#000', fontWeight:700, padding:'3px 8px', borderRadius:8, flexShrink:0 }}>ACTIVE</span>
+                )}
+
+                {/* 3-dot menu */}
+                <button onClick={() => setMenuOpen(menuOpen === sp.entity_id ? null : sp.entity_id)}
+                  style={{ background:'none', border:'none', cursor:'pointer', padding:'4px 6px', color:'rgba(255,255,255,0.5)', fontSize:20, lineHeight:1, flexShrink:0 }}>
+                  ⋮
+                </button>
+
+                {menuOpen === sp.entity_id && (
+                  <SpeakerMenu sp={sp} onClose={() => setMenuOpen(null)} castTo={castTo} joinTo={joinTo} />
                 )}
               </div>
-              {/* Volume slider */}
+
               {sp.state !== 'off' && sp.state !== 'unavailable' && (
-                <SpeakerVolumeSlider
-                  entityId={sp.entity_id}
-                  initial={sp.volume_level}
-                  onChange={setVol}
-                />
+                <div style={{ padding:'0 12px 10px' }}>
+                  <SpeakerVolumeSlider entityId={sp.entity_id} initial={sp.volume_level} onChange={setVol} />
+                </div>
               )}
             </div>
           )
@@ -200,7 +246,6 @@ function InlineSpeakerStrip() {
     </div>
   )
 }
-
 function SpeakerVolumeSlider({ entityId, initial, onChange }) {
   const { volume } = usePlayer()
   const [val, setVal] = useState(
@@ -222,7 +267,7 @@ function SpeakerVolumeSlider({ entityId, initial, onChange }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8 }}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)">
-        <path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
       </svg>
       <input type="range" min="0" max="100" value={val}
         onChange={e => handle(Number(e.target.value))}
@@ -266,15 +311,15 @@ function FullPlayer({ onClose }) {
         {/* Header */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px 8px', flexShrink:0 }}>
           <button onClick={onClose} style={{ background:'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path resp_player="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
           </button>
           <span style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', letterSpacing:1.8, textTransform:'uppercase' }}>Now Playing</span>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={() => setShowQueue(q => !q)} style={{ background: showQueue?'rgba(200,168,75,0.25)':'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path resp_player="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
             </button>
             <button onClick={() => setShowCast(true)} style={{ background:'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="white"><path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 9c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="white"><path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 9c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>
             </button>
           </div>
         </div>
@@ -331,18 +376,18 @@ function FullPlayer({ onClose }) {
           {/* Playback buttons */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:0 }}>
             <button onClick={playPrev} style={{ flex:1, background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'center', padding:12 }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path resp_player="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
             <button onClick={togglePlay} style={{ width:72, height:72, borderRadius:'50%', background:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer', boxShadow:'0 4px 28px rgba(200,168,75,0.55)', flexShrink:0 }}>
               {loading
                 ? <div style={{ width:24, height:24, border:'3px solid #000', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
                 : playing
-                  ? <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path resp_player="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                  : <svg width="28" height="28" viewBox="0 0 24 24" fill="#000" style={{ marginLeft:3 }}><path resp_player="M8 5v14l11-7z"/></svg>
+                  ? <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  : <svg width="28" height="28" viewBox="0 0 24 24" fill="#000" style={{ marginLeft:3 }}><path d="M8 5v14l11-7z"/></svg>
               }
             </button>
             <button onClick={() => playNext()} style={{ flex:1, background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'center', padding:12 }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path resp_player="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
           </div>
 
@@ -360,9 +405,96 @@ function FullPlayer({ onClose }) {
 }
 
 // ── Mini bar ─────────────────────────────────────────────────────────────────
+
+// ── Session Switcher ─────────────────────────────────────────────────────────
+function SessionSwitcher({ onClose }) {
+  const { sessions, activeId, switchSession, createSession, removeSession, renameSession } = usePlayer()
+  const [editing, setEditing] = useState(null) // session id being renamed
+  const [editVal, setEditVal] = useState('')
+
+  return (
+    <div style={{
+      position:'fixed', bottom:'calc(var(--player-height) + 8px)', left:0, right:0,
+      zIndex:500, display:'flex', justifyContent:'center', pointerEvents:'none'
+    }}>
+      <div style={{
+        pointerEvents:'all',
+        background:'var(--surface)', border:'1px solid var(--border)',
+        borderRadius:16, padding:12, width:'min(420px, 94vw)',
+        boxShadow:'0 -4px 40px rgba(0,0,0,0.7)'
+      }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+          <span style={{ fontSize:12, color:'var(--muted)', textTransform:'uppercase', letterSpacing:0.8 }}>Players</span>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={createSession} style={{ background:'var(--accent)', color:'#000', border:'none', borderRadius:8, padding:'4px 12px', fontSize:12, fontWeight:700, cursor:'pointer' }}>+ New</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--muted)', fontSize:20, lineHeight:1, padding:'0 4px' }}>✕</button>
+          </div>
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          {sessions.map(sess => {
+            const isActive = sess.id === activeId
+            return (
+              <div key={sess.id} onClick={() => { switchSession(sess.id); onClose() }}
+                style={{
+                  display:'flex', alignItems:'center', gap:10,
+                  background: isActive ? 'rgba(200,168,75,0.12)' : 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius:10, padding:'8px 12px', cursor:'pointer'
+                }}>
+                {/* Thumbnail */}
+                <div style={{ width:38, height:38, borderRadius:7, overflow:'hidden', background:'var(--card)', flexShrink:0 }}>
+                  {sess.track?.img
+                    ? <img src={`${window.ingressPath||''}/api/img?url=${encodeURIComponent(sess.track.img)}`} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>🎵</div>
+                  }
+                </div>
+
+                {/* Info */}
+                <div style={{ flex:1, minWidth:0 }}>
+                  {editing === sess.id
+                    ? <input autoFocus value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => { renameSession(sess.id, editVal||sess.label); setEditing(null) }}
+                        onKeyDown={e => { if(e.key==='Enter'){ renameSession(sess.id, editVal||sess.label); setEditing(null) } e.stopPropagation() }}
+                        onClick={e => e.stopPropagation()}
+                        style={{ background:'var(--card)', border:'1px solid var(--accent)', borderRadius:6, padding:'2px 8px', color:'var(--text)', fontSize:13, width:'100%' }}
+                      />
+                    : <div style={{ fontSize:13, fontWeight:isActive?600:400, color:isActive?'var(--accent)':'var(--text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        {sess.label}
+                      </div>
+                  }
+                  <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {sess.track ? `${sess.playing?'▶':'⏸'} ${sess.track.title}` : 'No track'}
+                    {sess.speaker !== 'local' && <span style={{ color:'var(--accent)', marginLeft:6 }}>→ {sess.speakerName}</span>}
+                  </div>
+                </div>
+
+                {/* Rename / Remove */}
+                <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setEditing(sess.id); setEditVal(sess.label) }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--muted)', fontSize:14, padding:'2px 5px' }} title="Rename">✏️</button>
+                  {sessions.length > 1 && (
+                    <button onClick={() => removeSession(sess.id)}
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'var(--muted)', fontSize:14, padding:'2px 5px' }} title="Remove">🗑</button>
+                  )}
+                </div>
+
+                {isActive && <span style={{ fontSize:9, background:'var(--accent)', color:'#000', fontWeight:700, padding:'2px 7px', borderRadius:7, flexShrink:0 }}>ACTIVE</span>}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Player() {
-  const { track, playing, progress, duration, loading, togglePlay, playNext } = usePlayer()
+  const { track, playing, progress, duration, loading, togglePlay, playNext, sessions, activeId, createSession } = usePlayer()
   const [expanded, setExpanded] = useState(false)
+  const [showSessions, setShowSessions] = useState(false)
+  const multiSession = sessions.length > 1
   const pct = duration > 0 ? (progress/duration)*100 : 0
 
   return (
@@ -394,19 +526,27 @@ export default function Player() {
                 {loading
                   ? <div style={{ width:22, height:22, border:'2px solid var(--accent)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
                   : playing
-                    ? <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                    : <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M8 5v14l11-7z"/></svg>
+                    ? <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    : <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path d="M8 5v14l11-7z"/></svg>
                 }
               </button>
               <button onClick={e => { e.stopPropagation(); playNext() }}
                 style={{ background:'transparent', border:'none', cursor:'pointer', padding:8, flexShrink:0, display:'flex', alignItems:'center' }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-secondary)"><path resp_player="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-secondary)"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              </button>
+              {/* Session switcher pill */}
+              <button onClick={e => { e.stopPropagation(); setShowSessions(v=>!v) }}
+                title="Switch player"
+                style={{ background: multiSession?'rgba(200,168,75,0.15)':`rgba(255,255,255,0.06)`, border:`1px solid ${multiSession?'var(--accent)':`var(--border)`}`, borderRadius:8, cursor:'pointer', padding:'4px 8px', display:'flex', alignItems:'center', gap:4, flexShrink:0 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill={multiSession?'var(--accent)':`rgba(255,255,255,0.4)`}><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/></svg>
+                {multiSession && <span style={{ fontSize:10, color:'var(--accent)', fontWeight:700 }}>{sessions.length}</span>}
               </button>
             </>
           )}
         </div>
       </div>
       {expanded && <FullPlayer onClose={() => setExpanded(false)} />}
+      {showSessions && <SessionSwitcher onClose={() => setShowSessions(false)} />}
     </>
   )
 }
