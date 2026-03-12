@@ -14,16 +14,15 @@ export default function Home() {
     // Home call only — recent is already inside home response
     api.home().catch(() => null).then(home => {
       try {
-        const d = home || {}
-        console.log('[Home] loaded, keys:', Object.keys(d))
+        const homeData = home || {}
+        console.log('[Home] loaded, keys:', Object.keys(homeData))
 
-        setBanners(extractBanners(d.banners || d.banner))
+        setBanners(extractBanners(homeData.banners || homeData.banner))
 
-        // recent is inside home response directly
-        const apiRecent = Array.isArray(d.recent) ? d.recent : []
+        const apiRecent = Array.isArray(homeData.recent) ? homeData.recent : []
         setRecent(apiRecent)
 
-        const { sections } = extractHome(d)
+        const { sections } = extractHome(homeData)
         setSections(sections)
       } catch(e) {
         console.error('[Home] render error:', e)

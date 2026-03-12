@@ -127,13 +127,13 @@ export default function CastModal({ track, onClose }) {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ entity_id, track_id:track.id, track_title:track.title })
       })
-      const d = await r.json()
-      if (d.ok) {
+      const resp = await r.json()
+      if (resp.ok) {
         setResults(prev => ({ ...prev, [entity_id]:'ok' }))
         setCastTarget(entity_id, speakerName)
         setHAVolume(entity_id, volume)
       } else {
-        setResults(prev => ({ ...prev, [entity_id]: d.error||'error' }))
+        setResults(prev => ({ ...prev, [entity_id]: resp.error||'error' }))
       }
     } catch { setResults(prev => ({ ...prev, [entity_id]:'error' })) }
     setCasting(null)
@@ -146,8 +146,8 @@ export default function CastModal({ track, onClose }) {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ track_id:track.id, track_title:track.title })
       })
-      const d = await r.json()
-      if (d.ok) {
+      const presetResp = await r.json()
+      if (presetResp.ok) {
         setResults(prev => ({ ...prev, [preset.id]:'ok' }))
         const firstId = preset.entity_ids[0]
         const firstName = speakers.find(s=>s.entity_id===firstId)?.name || preset.name

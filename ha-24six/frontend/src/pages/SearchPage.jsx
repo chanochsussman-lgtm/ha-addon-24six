@@ -12,12 +12,12 @@ function Spinner() {
 }
 
 function parseSections(data) {
-  const d = extractSearch(data)
-  if (!d || typeof d !== 'object') return []
+  const searchData = extractSearch(data)
+  if (!searchData || typeof searchData !== 'object') return []
   const out = []
   const try_ = (keys, label, type) => {
     for (const k of keys) {
-      const v = d[k]
+      const v = searchData[k]
       const arr = Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : null
       if (arr?.length) { out.push({ label, items:arr, type }); return }
     }
@@ -27,7 +27,7 @@ function parseSections(data) {
   try_(['albums','collections'], 'Albums', 'collection')
   try_(['playlists'], 'Playlists', 'playlist')
   const known = new Set(['songs','content','tracks','artists','albums','collections','playlists'])
-  Object.entries(d).forEach(([k,v]) => {
+  Object.entries(searchData).forEach(([k,v]) => {
     if (!known.has(k) && Array.isArray(v) && v.length && v[0]?.id)
       out.push({ label:k, items:v, type:'collection' })
   })
