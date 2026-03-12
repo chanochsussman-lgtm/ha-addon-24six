@@ -35,6 +35,13 @@ export default function CollectionPage() {
 
   const allTracks = songs.map(toTrack)
   const playAll  = () => { if (!allTracks.length) return; playTrack(allTracks[0], allTracks, 0) }
+
+  // Auto-play if only 1 song (single) — but only if not already playing this track
+  useEffect(() => {
+    if (allTracks.length === 1 && !loading) {
+      playTrack(allTracks[0], allTracks, 0)
+    }
+  }, [allTracks.length, loading])
   const playSong = i  => playTrack(allTracks[i], allTracks, i)
 
   const holdTimers = useRef({})

@@ -34,9 +34,13 @@ html, body, #root {
   display: flex;
   gap: 10px;
   overflow-x: auto;
-  padding-bottom: 2px;
+  padding-bottom: 4px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;  /* smooth momentum scroll on iOS */
+  touch-action: pan-x;               /* let browser handle horizontal swipe */
+  cursor: grab;
 }
+.scroll-row:active { cursor: grabbing; }
 .scroll-row::-webkit-scrollbar { display: none; }
 
 .tappable {

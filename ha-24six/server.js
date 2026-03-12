@@ -11,6 +11,15 @@ const app = express();
 const PORT = 8484;
 const BASE_URL = 'https://24six.app';
 const AUTH_FILE = '/data/auth.json';
+const RECENT_FILE = '/data/recent_plays.json';
+const MAX_RECENT = 30;
+
+function loadRecent() {
+  try { return JSON.parse(fs.readFileSync(RECENT_FILE, 'utf8')); } catch { return []; }
+}
+function saveRecent(items) {
+  try { fs.writeFileSync(RECENT_FILE, JSON.stringify(items)); } catch {}
+}
 const CREDENTIALS = {
   email: 'mark@eingroup.net',
   password: 'Cacm3618!',
@@ -245,7 +254,26 @@ app.get('/api/banners', async (req, res) => {
     res.json(arr);
   } catch(e) { console.error('[banners] error:', e.message); res.json([]); }
 });
-app.get('/api/browse/recent',   (req, res) => proxy(req, res, '/app/music/content/recent'));
+app.get('/api/browse/recent', (req, res) => {
+  // Serve locally tracked plays (so it updates immediately)
+  const local = loadRecent();
+  if (local.length > 0) return res.json(local);
+  // Fallback to API if nothing local yet
+  proxy(req, res, '/app/music/content/recent');
+});
+
+// Record a play (called by frontend when track starts)
+app.post('/api/browse/record-play', (req, res) => {
+  const { id, title, artist, img } = req.body;
+  if (!id) return res.json({ ok: false });
+  let items = loadRecent();
+  // Remove if already exists (move to top)
+  items = items.filter(i => i.id !== id);
+  items.unshift({ id, title, subtitle: artist, img, type: 'song', playedAt: Date.now() });
+  if (items.length > MAX_RECENT) items = items.slice(0, MAX_RECENT);
+  saveRecent(items);
+  res.json({ ok: true });
+});
 app.get('/api/categories',      (req, res) => proxy(req, res, '/app/music/category'));
 app.get('/api/categories/:id',  (req, res) => proxy(req, res, `/app/music/category/${req.params.id}`));
 app.get('/api/artists',         (req, res) => proxy(req, res, '/app/music/artist'));
@@ -308,7 +336,26 @@ app.get('/api/search', (req, res) => {
 });
 
 // ── Favorites / Library ───────────────────────────────────────────────────────
-app.get('/api/library/favorites', (req, res) => proxy(req, res, '/app/music/favorite'));
+app.get('/api/library/favorites', async (req, res) => {
+  try {
+    const url = `${BASE_URL}/app/music/favorite`;
+    const response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    const d = response.data;
+    console.log(`[favorites] status=${response.status} keys=${Object.keys(d||{}).join(',')} preview=${JSON.stringify(d).slice(0,300)}`);
+    if (response.status === 401 || response.status === 403) { await doLogin(); return res.redirect(req.originalUrl); }
+    // Normalize to { playlist: {title, img}, songs: [...] }
+    // API may return: array of songs, { content:[...] }, { data:{songs:[...]} }, etc.
+    let songs = [];
+    if (Array.isArray(d)) songs = d;
+    else if (Array.isArray(d.content)) songs = d.content;
+    else if (Array.isArray(d.data)) songs = d.data;
+    else if (Array.isArray(d.songs)) songs = d.songs;
+    else if (Array.isArray(d.favorites)) songs = d.favorites;
+    else if (d.data && Array.isArray(d.data.content)) songs = d.data.content;
+    const playlist = { title: 'My Favorites', img: songs[0]?.img || null, id: 'favorites' };
+    res.json({ playlist, songs, _raw_keys: Object.keys(d) });
+  } catch(e) { console.error('[favorites] error:', e.message); res.status(500).json({ error: e.message }); }
+});
 
 app.post('/api/library/favorites/:id', async (req, res) => {
   try {

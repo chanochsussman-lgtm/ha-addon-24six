@@ -12,9 +12,12 @@ export default function PlaylistPage() {
   const [menu, setMenu] = useState(null)
   const { playTrack, track: cur, playing } = usePlayer()
 
+  const isFavorites = !id || id === 'favorites' || window.location.pathname.includes('/favorites')
+
   useEffect(() => {
     setLoading(true)
-    api.playlist(id).then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
+    const fetch_ = isFavorites ? api.favorites() : api.playlist(id)
+    fetch_.then(d => { setData(d); setLoading(false) }).catch(() => setLoading(false))
   }, [id])
 
   if (loading) return (
@@ -23,8 +26,12 @@ export default function PlaylistPage() {
     </div>
   )
 
-  const playlist = data?.playlist || data?.data || data
-  const songs = data?.songs || data?.content || data?.contents || playlist?.songs || playlist?.content || playlist?.contents || []
+  const playlist = data?.playlist || data?.data || (data?.id || data?.title ? data : null) || {}
+  // songs can come from top-level (favorites route) or nested
+  const rawSongs = data?.songs || data?.content || data?.contents ||
+    playlist?.songs || playlist?.content || playlist?.contents || []
+  const songs = Array.isArray(rawSongs) ? rawSongs : []
+  console.log('[PlaylistPage] id='+id, 'keys='+Object.keys(data||{}).join(','), 'songs='+songs.length)
   const imgUrl = playlist?.img ? api.imgUrl(playlist.img) : null
 
   const toTrack = s => ({

@@ -252,6 +252,61 @@ export function PlayerProvider({ children }) {
     return () => audio.removeEventListener('volumechange', onVolumeChange)
   }, [])
 
+  // ── Keep audio alive when tab loses/regains focus ─────────────────────────
+  // Browsers suspend AudioContext and sometimes pause audio when tab is hidden.
+  // We listen for visibilitychange and page lifecycle events to resume it.
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState === 'visible') {
+        // Resume AudioContext if suspended
+        if (audioCtx && audioCtx.state === 'suspended') {
+          await audioCtx.resume().catch(() => {})
+        }
+        // If we were playing but audio paused due to tab hide, resume it
+        if (playingRef.current && audio.paused && audio.src) {
+          audio.play().catch(() => {})
+        }
+      }
+    }
+
+    // 'freeze' fires on some mobile browsers before tab is backgrounded
+    const onFreeze = () => {
+      // Don't do anything — let audio keep playing
+      // Audio element continues even when frozen, AudioContext may not
+    }
+
+    // 'resume' fires when coming back from frozen state
+    const onResume = async () => {
+      if (audioCtx && audioCtx.state === 'suspended') {
+        await audioCtx.resume().catch(() => {})
+      }
+      if (playingRef.current && audio.paused && audio.src) {
+        audio.play().catch(() => {})
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisible)
+    document.addEventListener('freeze', onFreeze)
+    document.addEventListener('resume', onResume)
+    // Also handle the audio element being interrupted by the browser
+    const onInterrupt = () => {
+      if (playingRef.current) {
+        // Brief delay then try to resume
+        setTimeout(() => {
+          if (playingRef.current && audio.paused) audio.play().catch(() => {})
+        }, 300)
+      }
+    }
+    audio.addEventListener('pause', onInterrupt)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      document.removeEventListener('freeze', onFreeze)
+      document.removeEventListener('resume', onResume)
+      audio.removeEventListener('pause', onInterrupt)
+    }
+  }, [])
+
   // Hardware volume keys (keyboard event)
   useEffect(() => {
     const onKey = (e) => {

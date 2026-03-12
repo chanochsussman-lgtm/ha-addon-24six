@@ -79,6 +79,7 @@ export default function App() {
             <Route path="/collection/:id" element={<CollectionPage />} />
             <Route path="/artist/:id"     element={<ArtistPage />} />
             <Route path="/playlist/:id"   element={<PlaylistPage />} />
+            <Route path="/favorites"         element={<PlaylistPage />} />
             <Route path="/speakers"       element={<SpeakersPage />} />
           </Routes>
         </div>
