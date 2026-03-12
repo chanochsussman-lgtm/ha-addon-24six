@@ -107,8 +107,17 @@ export function extractHome(d) {
     if (skip.has(k) || !Array.isArray(v) || !v.length || !v[0]?.id) return
     const sample = v[0]
     const looksLikeArtist = !!(sample.name && !sample.title && !sample.release_date)
-    const looksLikeSong   = !!(sample.artist_id && (sample.length != null || sample.duration != null))
-    const type  = looksLikeArtist ? 'artist' : looksLikeSong ? 'song' : 'collection'
+    // Key name hints: keys ending in Albums/Singles/Stories/Playlists/Collections are never songs
+    // Keys like 'trending', 'releases', 'recent' contain actual songs (have length field)
+    const keyLooksLikeCollection = /album|single|stor|playlist|collection|mix|release/i.test(k)
+    const keyLooksLikeArtist     = /artist/i.test(k)
+    // True songs have a numeric length/duration AND no release_date (albums have release_date)
+    const hasDuration  = sample.length != null || sample.duration != null
+    const hasRelease   = sample.release_date != null
+    const looksLikeSong = !!(sample.artist_id && hasDuration && !hasRelease && !keyLooksLikeCollection)
+    const type = looksLikeArtist || keyLooksLikeArtist ? 'artist'
+               : looksLikeSong ? 'song'
+               : 'collection'
     // camelCase → Title Case:  newAlbums → New Albums,  by24Six → By 24 Six
     const title = k.replace(/([A-Z0-9]+)/g, ' $1').replace(/^./, c => c.toUpperCase()).trim()
     console.log('[Home] section:', k, '->', `"${title}"`, type, v.length)
