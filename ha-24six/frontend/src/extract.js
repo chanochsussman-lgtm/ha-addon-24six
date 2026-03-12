@@ -7,11 +7,11 @@
  *   3. Never crashes — always returns a safe default
  */
 
-function log(label, raw) {
-  if (!raw) { console.log(`[${label}] null response`); return }
-  console.log(`[${label}] keys:`, Object.keys(raw))
+function log(label, apiResp) {
+  if (!apiResp) { console.log(`[${label}] null response`); return }
+  console.log(`[${label}] keys:`, Object.keys(apiResp))
   // Log each key's shape
-  Object.entries(raw).forEach(([k, v]) => {
+  Object.entries(apiResp).forEach(([k, v]) => {
     if (Array.isArray(v))
       console.log(`[${label}]  .${k} = array[${v.length}]`, v[0] ? Object.keys(v[0]) : '')
     else if (v && typeof v === 'object')
@@ -22,20 +22,20 @@ function log(label, raw) {
 }
 
 // Find any array of items with .id in an object, walking one level deep
-export function findArray(raw, preferKeys = []) {
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
+export function findArray(apiResp, preferKeys = []) {
+  if (!apiResp) return []
+  if (Array.isArray(apiResp)) return apiResp
   // Try preferred keys first
   for (const k of preferKeys) {
-    if (Array.isArray(raw[k]) && raw[k].length > 0) return raw[k]
+    if (Array.isArray(apiResp[k]) && apiResp[k].length > 0) return apiResp[k]
   }
   // Then all known content keys
   for (const k of ['content','songs','items','data','results','list','tracks','collections','albums','playlists']) {
-    if (Array.isArray(raw[k]) && raw[k].length > 0) return raw[k]
+    if (Array.isArray(apiResp[k]) && apiResp[k].length > 0) return apiResp[k]
   }
   // One envelope level deeper
-  if (raw.data && typeof raw.data === 'object' && !Array.isArray(raw.data)) {
-    return findArray(raw.data, preferKeys)
+  if (apiResp.data && typeof apiResp.data === 'object' && !Array.isArray(apiResp.data)) {
+    return findArray(apiResp.data, preferKeys)
   }
   return []
 }
@@ -79,9 +79,9 @@ export function normTrack(item, fallbackImg, fallbackArtist) {
 
 // ── Per-page extractors ──────────────────────────────────────────────────────
 
-export function extractHome(raw) {
-  log('Home', raw)
-  if (!raw) return { sections: [] }
+export function extractHome(apiResp) {
+  log('Home', apiResp)
+  if (!apiResp) return { sections: [] }
 
   const sections = []
 
@@ -93,7 +93,7 @@ export function extractHome(raw) {
   ])
 
   // Categories: flat array of {id,title,color} — add as a single "Categories" card row
-  const catSource = raw.categories || raw.featured_categories || []
+  const catSource = apiResp.categories || apiResp.featured_categories || []
   if (catSource.length) {
     const catItems = catSource
       .filter(c => c && c.id)
@@ -110,7 +110,7 @@ export function extractHome(raw) {
   }
 
   // Every other array key — fully dynamic, zero hardcoding
-  Object.entries(raw).forEach(([k, v]) => {
+  Object.entries(apiResp).forEach(([k, v]) => {
     if (skip.has(k) || !Array.isArray(v)) return
     const vv = v.filter(Boolean)  // strip null/undefined slots (e.g. myPlaylists: [,...])
     if (!vv.length || !vv[0]?.id) return
@@ -137,24 +137,24 @@ export function extractHome(raw) {
   return { sections }
 }
 
-export function extractBanners(raw) {
-  log('Banners', raw)
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
-  if (Array.isArray(raw.data))    return raw.data
-  if (Array.isArray(raw.banners)) return raw.banners
-  if (Array.isArray(raw.items))   return raw.items
+export function extractBanners(apiResp) {
+  log('Banners', apiResp)
+  if (!apiResp) return []
+  if (Array.isArray(apiResp)) return apiResp
+  if (Array.isArray(apiResp.data))    return apiResp.data
+  if (Array.isArray(apiResp.banners)) return apiResp.banners
+  if (Array.isArray(apiResp.items))   return apiResp.items
   return []
 }
 
-export function extractRecent(raw) {
-  log('Recent', raw)
-  if (!raw) return []
+export function extractRecent(apiResp) {
+  log('Recent', apiResp)
+  if (!apiResp) return []
   // Server returns { local:[], api:<raw> }
   // OR could be a plain array if coming from home.recent
-  if (Array.isArray(raw)) return raw
-  const local = Array.isArray(raw.local) ? raw.local : []
-  const api   = raw.api
+  if (Array.isArray(apiResp)) return apiResp
+  const local = Array.isArray(apiResp.local) ? apiResp.local : []
+  const api   = apiResp.api
   let apiItems = []
   if (api) {
     if (Array.isArray(api))              apiItems = api
@@ -166,69 +166,69 @@ export function extractRecent(raw) {
   return [...local, ...apiItems.filter(i => i.id && !localIds.has(i.id))].slice(0, 30)
 }
 
-export function extractCollection(raw) {
-  log('Collection', raw)
-  if (!raw) return { meta: {}, songs: [], albums: [], featuredOn: [] }
+export function extractCollection(apiResp) {
+  log('Collection', apiResp)
+  if (!apiResp) return { meta: {}, songs: [], albums: [], featuredOn: [] }
 
   // Confirmed shape: { collection:{id,title,img,color,contents:[songs]}, albums:[], featured_on:[], artist:{} }
-  const meta      = raw.collection || (raw.id ? raw : {})
+  const meta      = apiResp.collection || (apiResp.id ? apiResp : {})
   const songs     = Array.isArray(meta.contents)   ? meta.contents
                   : findArray(meta, ['songs','content','items','tracks'])
-  const albums    = Array.isArray(raw.albums)         ? raw.albums     : []
-  const featuredOn = Array.isArray(raw.featured_on)   ? raw.featured_on : []
+  const albums    = Array.isArray(apiResp.albums)         ? apiResp.albums     : []
+  const featuredOn = Array.isArray(apiResp.featured_on)   ? apiResp.featured_on : []
   // artist info — prefer raw.artist object, fall back to meta.artists[0]
-  const artistObj = raw.artist || meta.artists?.[0] || null
+  const artistObj = apiResp.artist || meta.artists?.[0] || null
 
   return { meta, songs: Array.isArray(songs) ? songs : [], albums, featuredOn, artistObj }
 }
 
-export function extractArtist(raw) {
-  log('Artist', raw)
-  if (!raw) return { artist: {}, songs: [], albums: [], featuredOn: [], similar: [] }
+export function extractArtist(apiResp) {
+  log('Artist', apiResp)
+  if (!apiResp) return { artist: {}, songs: [], albums: [], featuredOn: [], similar: [] }
 
   // artist object: nested raw.artist OR fields are at root level (both present in API)
-  const artist = (raw.artist && typeof raw.artist === 'object' && !Array.isArray(raw.artist))
-    ? { ...raw.artist, bio: raw.bio || raw.artist.bio, img: raw.img || raw.artist.img, color: raw.color || raw.artist.color }
-    : (raw.id && raw.name ? raw : {})
+  const artist = (apiResp.artist && typeof apiResp.artist === 'object' && !Array.isArray(apiResp.artist))
+    ? { ...apiResp.artist, bio: apiResp.bio || apiResp.artist.bio, img: apiResp.img || apiResp.artist.img, color: apiResp.color || apiResp.artist.color }
+    : (apiResp.id && apiResp.name ? apiResp : {})
 
   // top_songs items have artist_id + title but may lack img — use artist img as fallback
-  const songs     = Array.isArray(raw.top_songs)    ? raw.top_songs    : findArray(raw, ['songs','content'])
+  const songs     = Array.isArray(apiResp.top_songs)    ? apiResp.top_songs    : findArray(apiResp, ['songs','content'])
   // albums: artist's own releases
-  const albums    = Array.isArray(raw.albums)        ? raw.albums       : findArray(raw, ['latest_albums','collections'])
+  const albums    = Array.isArray(apiResp.albums)        ? apiResp.albums       : findArray(apiResp, ['latest_albums','collections'])
   // featured_on: albums where this artist is a guest
-  const featuredOn = Array.isArray(raw.featured_on)  ? raw.featured_on  : []
+  const featuredOn = Array.isArray(apiResp.featured_on)  ? apiResp.featured_on  : []
   // similar artists
-  const similar   = Array.isArray(raw.similar)       ? raw.similar      : []
+  const similar   = Array.isArray(apiResp.similar)       ? apiResp.similar      : []
 
   return { artist, songs, albums, featuredOn, similar }
 }
 
-export function extractPlaylist(raw) {
-  log('Playlist', raw)
-  if (!raw) return { meta: {}, songs: [] }
+export function extractPlaylist(apiResp) {
+  log('Playlist', apiResp)
+  if (!apiResp) return { meta: {}, songs: [] }
   // Confirmed shape: { playlist: { id, title, img, color, contents:[...songs] } }
-  const meta  = raw.playlist || (raw.id ? raw : {})
+  const meta  = apiResp.playlist || (apiResp.id ? apiResp : {})
   const songs = Array.isArray(meta.contents) ? meta.contents
               : findArray(meta, ['content','songs','items','tracks'])
-              || findArray(raw,   ['content','songs','items','tracks','playlist_content'])
+              || findArray(apiResp,   ['content','songs','items','tracks','playlist_content'])
   return { meta, songs: Array.isArray(songs) ? songs : [] }
 }
 
-export function extractSearch(raw) {
-  log('Search', raw)
-  if (!raw) return {}
+export function extractSearch(apiResp) {
+  log('Search', apiResp)
+  if (!apiResp) return {}
   // Returns object with section arrays; frontend maps them
-  return raw
+  return apiResp
 }
 
-export function extractQuickSearch(raw) {
-  log('QuickSearch', raw)
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw
+export function extractQuickSearch(apiResp) {
+  log('QuickSearch', apiResp)
+  if (!apiResp) return []
+  if (Array.isArray(apiResp)) return apiResp
   // Merge all section arrays into flat list
   const out = []
   for (const k of ['songs','content','tracks','artists','albums','collections','playlists','results','data','items']) {
-    if (Array.isArray(raw[k])) raw[k].slice(0, 4).forEach(x => out.push({ ...x, _section: k }))
+    if (Array.isArray(apiResp[k])) apiResp[k].slice(0, 4).forEach(x => out.push({ ...x, _section: k }))
   }
   return out.length ? out : []
 }
