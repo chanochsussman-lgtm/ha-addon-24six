@@ -48,7 +48,7 @@ export function PlayerProvider({ children }) {
   // ── Audio events ─────────────────────────────────────────────────────────
   useEffect(() => {
     const onTime  = () => { setProgress(audio.currentTime); progressRef.current = audio.currentTime }
-    const onDur   = () => { const d = isNaN(audio.duration)?0:audio.duration; setDuration(d); durationRef.current=d }
+    const onDur   = () => { const dur = isNaN(audio.duration)?0:audio.duration; setDuration(dur); durationRef.current=dur }
     const onPlay  = () => {
       setPlaying(true); playingRef.current=true; setLoading(false)
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
@@ -73,17 +73,11 @@ export function PlayerProvider({ children }) {
         const base = window.ingressPath || ''
         fetch(`${base}/api/artists/${artistId}`)
           .then(r => r.json())
-          .then(d => {
-            // Collect all songs from artist's albums in order
-            // top_songs are singles; albums have their own tracks we need to load
-            // Use albums list — navigate to each collection to get songs would be too many calls
-            // Instead use top_songs as the continuation queue, excluding already-played track
-            const topSongs = Array.isArray(d.top_songs) ? d.top_songs : []
-            const albums   = Array.isArray(d.albums)    ? d.albums    : []
-
-            // Build a continuation queue from top_songs (already full track objects)
-            const artistImg = d.artist?.img || d.img || t.img
-            const artistName = d.artist?.name || d.name || t.artist
+          .then(artistData => {
+            const topSongs = Array.isArray(artistData.top_songs) ? artistData.top_songs : []
+            const albums   = Array.isArray(artistData.albums)    ? artistData.albums    : []
+            const artistImg  = artistData.artist?.img  || artistData.img  || t.img
+            const artistName = artistData.artist?.name || artistData.name || t.artist
             const nextTracks = topSongs
               .filter(s => s.id !== t.id)  // skip the one we just played
               .map(s => ({
@@ -103,13 +97,13 @@ export function PlayerProvider({ children }) {
               const nextAlbum = albums.find(a => a.id !== (t.collectionId)) || albums[0]
               fetch(`${base}/api/collections/${nextAlbum.id}`)
                 .then(r => r.json())
-                .then(ad => {
-                  const songs = Array.isArray(ad.collection?.contents) ? ad.collection.contents : []
+                .then(albumData => {
+                  const songs = Array.isArray(albumData.collection?.contents) ? albumData.collection.contents : []
                   const albumTracks = songs.map(s => ({
                     id:     s.id,
                     title:  s.title || s.name || '',
                     artist: s.artists?.map(a=>a.name).join(', ') || artistName,
-                    img:    s.img || ad.collection?.img || artistImg,
+                    img:    s.img || albumData.collection?.img || artistImg,
                     artistId: artistId,
                     collectionId: nextAlbum.id,
                   }))
@@ -338,8 +332,8 @@ export function PlayerProvider({ children }) {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ entity_id:activeSpeakerRef.current, track_id:t.id, track_title:t.title })
         })
-        const d = await r.json()
-        if (d.ok) {
+        const castResp = await r.json()
+        if (castResp.ok) {
           setPlaying(true); playingRef.current=true; setLoading(false)
           await _pushCastMetadata(t, activeSpeakerRef.current)
         }
