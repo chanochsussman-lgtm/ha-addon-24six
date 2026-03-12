@@ -4,7 +4,7 @@ import { api } from '../api'
 import { usePlayer } from '../store/index.jsx'
 import ContextMenu from './ContextMenu'
 
-export default function AlbumCard({ item, size = 120, circle = false }) {
+export default function AlbumCard({ item, size = 120, circle = false, rowQueue = null, rowQueueIdx = 0 }) {
   const nav = useNavigate()
   const { playTrack } = usePlayer()
   const [menu, setMenu] = useState(false)
@@ -13,20 +13,22 @@ export default function AlbumCard({ item, size = 120, circle = false }) {
 
   if (!item) return null
   const imgUrl = api.imgUrl(item.img)
-  const type = item.type || 'collection'
-
+  const type   = item.type || 'collection'
   const isSong = type === 'song' || type === 'content'
 
   const toTrack = (s) => ({
-    id: s.id,
-    title: s.title || s.name,
+    id:     s.id,
+    title:  s.title || s.name || '',
     artist: s.artists?.map(a => a.name).join(', ') || s.subtitle || '',
-    img: s.img
+    img:    s.img || null,
   })
 
   const go = () => {
     if (isSong) {
-      playTrack(toTrack(item), [toTrack(item)], 0)
+      // Use the row queue if available, otherwise just this song
+      const q   = rowQueue?.length ? rowQueue : [toTrack(item)]
+      const idx = rowQueue?.length ? rowQueueIdx : 0
+      playTrack(q[idx], q, idx)
     } else if (type === 'artist') {
       nav(`/artist/${item.id}`)
     } else if (type === 'playlist') {
@@ -39,17 +41,11 @@ export default function AlbumCard({ item, size = 120, circle = false }) {
   const onPointerDown = () => {
     moved.current = false
     holdTimer.current = setTimeout(() => {
-      if (!moved.current) setMenu(true)
+      if (!moved.current && isSong) setMenu(true)
     }, 500)
   }
-
-  const onPointerMove = () => { moved.current = true }
-
-  const onPointerUp = () => {
-    clearTimeout(holdTimer.current)
-  }
-
-  const songForMenu = isSong ? toTrack(item) : null
+  const onPointerMove   = () => { moved.current = true }
+  const onPointerUp     = () => clearTimeout(holdTimer.current)
 
   return (
     <>
@@ -60,35 +56,29 @@ export default function AlbumCard({ item, size = 120, circle = false }) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        style={{ width: size, flexShrink: 0, userSelect: 'none' }}
+        style={{ width:size, flexShrink:0, userSelect:'none' }}
       >
-        <div style={{
-          width: size, height: size,
-          borderRadius: circle ? '50%' : 10,
-          overflow: 'hidden', background: 'var(--card)', marginBottom: 6
-        }}>
+        <div style={{ width:size, height:size, borderRadius:circle?'50%':10, overflow:'hidden', background:'var(--card)', marginBottom:6 }}>
           {imgUrl
-            ? <img src={imgUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
-            : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, color: 'var(--muted)' }}>🎵</div>
+            ? <img src={imgUrl} style={{ width:'100%', height:'100%', objectFit:'cover' }} loading="lazy" />
+            : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, color:'var(--muted)' }}>🎵</div>
           }
         </div>
-        <div style={{
-          fontSize: 11, fontWeight: 500, color: 'var(--text)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'
-        }}>{item.title || item.name}</div>
+        <div style={{ fontSize:11, fontWeight:500, color:'var(--text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+          {item.title || item.name}
+        </div>
         {item.subtitle && (
-          <div style={{
-            fontSize: 10, color: 'var(--text-secondary)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1
-          }}>{item.subtitle}</div>
+          <div style={{ fontSize:10, color:'var(--text-secondary)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', marginTop:1 }}>
+            {item.subtitle}
+          </div>
         )}
       </div>
 
-      {menu && songForMenu && (
+      {menu && (
         <ContextMenu
-          song={songForMenu}
-          queue={[songForMenu]}
-          queueIndex={0}
+          song={toTrack(item)}
+          queue={rowQueue || [toTrack(item)]}
+          queueIndex={rowQueueIdx}
           onClose={() => setMenu(false)}
         />
       )}

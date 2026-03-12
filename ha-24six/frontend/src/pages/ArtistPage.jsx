@@ -20,14 +20,20 @@ export default function ArtistPage() {
     setLoading(true); setError(null); setArtist(null); setTopSongs([]); setCollections([])
     api.artist(id)
       .then(d => {
-        // Server now normalizes to { artist, top_songs, collections }
-        // but handle raw shape too just in case
-        const a   = d?.artist      ?? (d?.id ? d : {})
-        const ts  = d?.top_songs   ?? d?.songs   ?? []
-        const col = d?.collections ?? d?.albums  ?? []
-        setArtist(Array.isArray(a) ? a[0] ?? {} : a)
-        setTopSongs(Array.isArray(ts)  ? ts  : [])
-        setCollections(Array.isArray(col) ? col : [])
+        console.log('[ArtistPage] raw d:', JSON.stringify(d)?.slice(0,400))
+        try {
+          const a   = d?.artist      ?? (d?.id ? d : {})
+          const ts  = d?.top_songs   ?? d?.songs   ?? []
+          const col = d?.collections ?? d?.albums  ?? []
+          setArtist(Array.isArray(a) ? (a[0] ?? {}) : (a ?? {}))
+          setTopSongs(Array.isArray(ts)  ? ts  : [])
+          setCollections(Array.isArray(col) ? col : [])
+        } catch(ex) {
+          console.error('[ArtistPage] parse error:', ex.message)
+          setArtist({})
+          setTopSongs([])
+          setCollections([])
+        }
         setLoading(false)
       })
       .catch(e => { setError(e.message); setLoading(false) })

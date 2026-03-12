@@ -254,12 +254,21 @@ app.get('/api/banners', async (req, res) => {
     res.json(arr);
   } catch(e) { console.error('[banners] error:', e.message); res.json([]); }
 });
-app.get('/api/browse/recent', (req, res) => {
-  // Serve locally tracked plays (so it updates immediately)
+app.get('/api/browse/recent', async (req, res) => {
+  // Merge local plays (immediate) with API recent (server-side history)
   const local = loadRecent();
-  if (local.length > 0) return res.json(local);
-  // Fallback to API if nothing local yet
-  proxy(req, res, '/app/music/content/recent');
+  try {
+    const url = `${BASE_URL}/app/music/content/recent`;
+    const response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    const d = response.data;
+    let apiItems = Array.isArray(d) ? d : (Array.isArray(d?.content) ? d.content : Array.isArray(d?.data) ? d.data : []);
+    // Merge: local first (deduped), then API items not already in local
+    const localIds = new Set(local.map(i => i.id));
+    const merged = [...local, ...apiItems.filter(i => !localIds.has(i.id))].slice(0, 30);
+    return res.json(merged);
+  } catch(e) {
+    return res.json(local); // fallback to local only
+  }
 });
 
 // Record a play (called by frontend when track starts)
@@ -284,12 +293,24 @@ app.get('/api/artists/:id', async (req, res) => {
     console.log(`[artist/${req.params.id}] status=${response.status}`);
     const d = response.data;
     console.log(`[artist/${req.params.id}] keys=${Object.keys(d||{}).join(',')} preview=${JSON.stringify(d).slice(0,400)}`);
-    if (response.status === 401 || response.status === 403) { await doLogin(); return res.redirect(req.originalUrl); }
-    // Normalize: always return { artist, top_songs, collections }
-    let artist = d.artist || d.data?.artist || (d.id ? d : null) || {};
-    let top_songs = d.top_songs || d.data?.top_songs || d.songs || d.data?.songs || d.content || d.data?.content || [];
-    let collections = d.collections || d.data?.collections || d.albums || d.data?.albums || [];
-    res.json({ artist, top_songs, collections, _raw_keys: Object.keys(d) });
+    let d2 = d;
+    if (response.status === 401 || response.status === 403) {
+      await doLogin();
+      const retry = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+      d2 = retry.data;
+      console.log(`[artist/${req.params.id}] retry keys=${Object.keys(d2||{}).join(',')}`);
+    }
+    // The API wraps in a 'data' envelope: { data: { artist:{}, content:[], collections:[] } }
+    const payload = d2?.data || d2;
+    let artist      = payload?.artist      || (payload?.id ? payload : null) || {};
+    let top_songs   = payload?.content     || payload?.top_songs || payload?.songs || [];
+    let collections = payload?.collections || payload?.albums    || [];
+    // If artist is an array (search-style response), unwrap it
+    if (Array.isArray(artist)) artist = artist[0] || {};
+    if (!Array.isArray(top_songs))   top_songs   = [];
+    if (!Array.isArray(collections)) collections = [];
+    console.log(`[artist/${req.params.id}] parsed: artist.name=${artist?.name} songs=${top_songs.length} collections=${collections.length}`);
+    res.json({ artist, top_songs, collections });
   } catch(e) { console.error('[artist] error:', e.message); res.status(500).json({ error: e.message }); }
 });
 app.get('/api/playlists',       (req, res) => proxy(req, res, '/app/music/playlist'));
@@ -340,20 +361,25 @@ app.get('/api/library/favorites', async (req, res) => {
   try {
     const url = `${BASE_URL}/app/music/favorite`;
     const response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
-    const d = response.data;
-    console.log(`[favorites] status=${response.status} keys=${Object.keys(d||{}).join(',')} preview=${JSON.stringify(d).slice(0,300)}`);
-    if (response.status === 401 || response.status === 403) { await doLogin(); return res.redirect(req.originalUrl); }
-    // Normalize to { playlist: {title, img}, songs: [...] }
-    // API may return: array of songs, { content:[...] }, { data:{songs:[...]} }, etc.
+    let fav = response.data;
+    console.log(`[favorites] status=${response.status} keys=${Object.keys(fav||{}).join(',')} preview=${JSON.stringify(fav).slice(0,300)}`);
+    if (response.status === 401 || response.status === 403) {
+      await doLogin();
+      const retry = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+      fav = retry.data;
+      console.log(`[favorites] retry keys=${Object.keys(fav||{}).join(',')}`);
+    }
+    // API wraps in 'data' envelope: { data: { content:[...] } } or flat array
+    const favPayload = fav?.data || fav;
     let songs = [];
-    if (Array.isArray(d)) songs = d;
-    else if (Array.isArray(d.content)) songs = d.content;
-    else if (Array.isArray(d.data)) songs = d.data;
-    else if (Array.isArray(d.songs)) songs = d.songs;
-    else if (Array.isArray(d.favorites)) songs = d.favorites;
-    else if (d.data && Array.isArray(d.data.content)) songs = d.data.content;
+    if (Array.isArray(favPayload))                    songs = favPayload;
+    else if (Array.isArray(favPayload?.content))      songs = favPayload.content;
+    else if (Array.isArray(favPayload?.songs))        songs = favPayload.songs;
+    else if (Array.isArray(favPayload?.favorites))    songs = favPayload.favorites;
+    else if (Array.isArray(fav?.content))             songs = fav.content;
+    console.log(`[favorites] extracted songs=${songs.length}`);
     const playlist = { title: 'My Favorites', img: songs[0]?.img || null, id: 'favorites' };
-    res.json({ playlist, songs, _raw_keys: Object.keys(d) });
+    res.json({ playlist, songs });
   } catch(e) { console.error('[favorites] error:', e.message); res.status(500).json({ error: e.message }); }
 });
 
@@ -552,6 +578,24 @@ app.post('/api/ha/volume', async (req, res) => {
 // ── Serve React Frontend ──────────────────────────────────────────────────────
 const DIST = path.join(__dirname, 'frontend', 'dist');
 app.use(express.static(DIST));
+
+// ── DEBUG: see raw API responses ─────────────────────────────────────────────
+app.get('/api/debug/artist/:id', async (req, res) => {
+  try {
+    const url = `${BASE_URL}/app/music/artist/${req.params.id}`;
+    const r = await client({ method:'GET', url, headers:{'Accept':'application/json'}, validateStatus:()=>true });
+    res.json({ status: r.status, keys: Object.keys(r.data||{}), raw: r.data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/debug/favorites', async (req, res) => {
+  try {
+    const url = `${BASE_URL}/app/music/favorite`;
+    const r = await client({ method:'GET', url, headers:{'Accept':'application/json'}, validateStatus:()=>true });
+    res.json({ status: r.status, keys: Object.keys(r.data||{}), raw: r.data });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(DIST, 'index.html'));
 });
