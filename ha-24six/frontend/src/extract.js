@@ -92,36 +92,46 @@ export function extractHome(d) {
     'data','meta','pagination','csrf_token',
   ])
 
-  // Category rows: [{ category:{id,title}, data:[...] }]
+  // Categories: flat array of {id,title,color} — add as a single "Categories" card row
   const catSource = d.categories || d.featured_categories || []
-  catSource.forEach(c => {
-    const cat   = c.category || c
-    const title = cat.title  || cat.name
-    const items = c.data     || c.items || []
-    if (title && Array.isArray(items) && items.length)
-      sections.push({ title, items: items.map(i => normItem(i, 'collection')).filter(Boolean), catId: cat.id })
-  })
+  if (catSource.length) {
+    const catItems = catSource
+      .filter(c => c && c.id)
+      .map(c => ({
+        id:       c.id,
+        title:    c.title || c.name,
+        subtitle: null,
+        img:      c.img || null,
+        color:    c.color || null,
+        type:     'category',
+      }))
+    if (catItems.length)
+      sections.push({ title: 'Categories', items: catItems, catId: null })
+  }
 
   // Every other array key — fully dynamic, zero hardcoding
   Object.entries(d).forEach(([k, v]) => {
-    if (skip.has(k) || !Array.isArray(v) || !v.length || !v[0]?.id) return
-    const sample = v[0]
+    const vv = v.filter(Boolean)  // strip null/undefined slots (e.g. myPlaylists: [,...])
+    if (skip.has(k) || !vv.length || !vv[0]?.id) return
+    const sample = vv[0]
+    // sample already declared above
     const looksLikeArtist = !!(sample.name && !sample.title && !sample.release_date)
-    // Key name hints: keys ending in Albums/Singles/Stories/Playlists/Collections are never songs
-    // Keys like 'trending', 'releases', 'recent' contain actual songs (have length field)
-    const keyLooksLikeCollection = /album|single|stor|playlist|collection|mix|release/i.test(k)
     const keyLooksLikeArtist     = /artist/i.test(k)
-    // True songs have a numeric length/duration AND no release_date (albums have release_date)
-    const hasDuration  = sample.length != null || sample.duration != null
-    const hasRelease   = sample.release_date != null
-    const looksLikeSong = !!(sample.artist_id && hasDuration && !hasRelease && !keyLooksLikeCollection)
-    const type = looksLikeArtist || keyLooksLikeArtist ? 'artist'
+    const keyLooksLikeCollection = /album|single|stor|playlist|collection|mix/i.test(k)
+    // True songs: have artist_id + duration, no release_date, key doesn't suggest collection
+    const looksLikeSong = !!(
+      sample.artist_id &&
+      (sample.length != null || sample.duration != null) &&
+      !sample.release_date &&
+      !keyLooksLikeCollection
+    )
+    const type = (looksLikeArtist || keyLooksLikeArtist) ? 'artist'
                : looksLikeSong ? 'song'
                : 'collection'
     // camelCase → Title Case:  newAlbums → New Albums,  by24Six → By 24 Six
     const title = k.replace(/([A-Z0-9]+)/g, ' $1').replace(/^./, c => c.toUpperCase()).trim()
     console.log('[Home] section:', k, '->', `"${title}"`, type, v.length)
-    sections.push({ title, items: v.map(i => normItem(i, type)).filter(Boolean), circle: looksLikeArtist })
+    sections.push({ title, items: vv.map(i => normItem(i, type)).filter(Boolean), circle: looksLikeArtist })
   })
 
   return { sections }

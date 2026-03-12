@@ -11,6 +11,7 @@ import ArtistPage from './pages/ArtistPage'
 import SearchPage from './pages/SearchPage'
 import PlaylistPage from './pages/PlaylistPage'
 import SpeakersPage from './pages/SpeakersPage'
+import CategoryPage from './pages/CategoryPage'
 
 function Login({ onLogin }) {
   const [loading, setLoading] = useState(false)
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/playlist/:id"   element={<PlaylistPage />} />
             <Route path="/favorites"         element={<PlaylistPage />} />
             <Route path="/speakers"       element={<SpeakersPage />} />
+            <Route path="/category/:id"    element={<CategoryPage />} />
           </Routes>
         </div>
         <div style={{ position:'fixed', bottom:0, left:0, right:0, zIndex:100 }}>

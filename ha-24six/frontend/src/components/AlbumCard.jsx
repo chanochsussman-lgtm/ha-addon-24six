@@ -12,7 +12,7 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
   const moved = useRef(false)
 
   if (!item) return null
-  const imgUrl = api.imgUrl(item.img)
+  const imgUrl = (type === 'category') ? null : api.imgUrl(item.img)
   const type   = item.type || 'collection'
   const isSong = type === 'song' || type === 'content'
 
@@ -30,6 +30,7 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
       playTrack(q[idx], q, idx)
     } else if (type === 'artist')   nav(`/artist/${item.id}`)
     else if (type === 'playlist')   nav(`/playlist/${item.id}`)
+    else if (type === 'category')   nav(`/category/${item.id}`)
     else                            nav(`/collection/${item.id}`)
   }
 
@@ -52,9 +53,13 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
         onContextMenu={onContextMenu}
         style={{ width:size, flexShrink:0, userSelect:'none' }}>
         <div style={{ width:size, height:size, borderRadius:circle?'50%':10, overflow:'hidden', background:'var(--card)', marginBottom:6 }}>
-          {imgUrl
-            ? <img src={imgUrl} style={{ width:'100%', height:'100%', objectFit:'cover' }} loading="lazy" />
-            : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, color:'var(--muted)' }}>🎵</div>
+          {type === 'category'
+            ? <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', background: item.color || 'var(--card)', padding:6 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#fff', textAlign:'center', lineHeight:1.3 }}>{item.title}</span>
+              </div>
+            : imgUrl
+              ? <img src={imgUrl} style={{ width:'100%', height:'100%', objectFit:'cover' }} loading="lazy" />
+              : <div style={{ width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, color:'var(--muted)' }}>🎵</div>
           }
         </div>
         <div style={{ fontSize:11, fontWeight:500, color:'var(--text)', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>

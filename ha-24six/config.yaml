@@ -1,6 +1,6 @@
 name: "24Six Music"
 description: "24Six Jewish Music Streaming for Home Assistant"
-version: "1.5.14"
+version: "1.5.15"
 slug: twentyfour_six
 url: "https://github.com/chanochsussman-lgtm/ha-addon-24six"
 
