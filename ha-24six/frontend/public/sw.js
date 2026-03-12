@@ -1,5 +1,5 @@
 // 24Six Service Worker — keeps app shell cached and audio fetch alive
-const CACHE = 'twentyfour-six-v3'
+const CACHE = 'twentyfour-six-v4'
 const PRECACHE = ['./', './index.html']
 
 self.addEventListener('install', evt => {
@@ -18,44 +18,52 @@ self.addEventListener('activate', evt => {
 self.addEventListener('fetch', evt => {
   const url = new URL(evt.request.url)
 
-  // Never intercept API, WS, or audio stream calls
-  if (url.pathname.includes('/api/') || url.pathname.includes('/ws/')) return
+  // Never intercept API, WS, audio, or non-GET requests
+  if (
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/ws/') ||
+    evt.request.method !== 'GET'
+  ) return
 
   if (evt.request.mode === 'navigate') {
+    // For navigation: fetch fresh, fall back to cached index.html
+    // IMPORTANT: clone before reading to avoid "body already used" error
     evt.respondWith(
-      fetch(evt.request)
-        .then(res => { caches.open(CACHE).then(c => c.put(evt.request, res.clone())); return res })
+      fetch(evt.request.clone())
+        .then(res => {
+          if (res.ok) {
+            const toCache = res.clone()
+            caches.open(CACHE).then(c => c.put(evt.request, toCache))
+          }
+          return res
+        })
         .catch(() => caches.match('./index.html'))
     )
     return
   }
 
+  // For assets: cache-first
   evt.respondWith(
     caches.match(evt.request).then(cached => {
       if (cached) return cached
-      return fetch(evt.request).then(res => {
-        if (res.ok) caches.open(CACHE).then(c => c.put(evt.request, res.clone()))
+      return fetch(evt.request.clone()).then(res => {
+        if (res && res.ok && res.status < 400) {
+          const toCache = res.clone()
+          caches.open(CACHE).then(c => c.put(evt.request, toCache))
+        }
         return res
-      })
+      }).catch(() => new Response('', { status: 503 }))
     })
   )
 })
 
-// Keep SW alive with periodic pings from the page
 self.addEventListener('message', evt => {
   if (evt.data === 'ping') evt.source?.postMessage('pong')
-  // When SW gets a ping while page is backgrounded, do a no-op fetch
-  // to prevent the SW from being killed
   if (evt.data === 'keepalive') {
-    evt.waitUntil(
-      self.clients.matchAll().then(() => {})
-    )
+    evt.waitUntil(self.clients.matchAll().then(() => {}))
   }
 })
 
-// Periodic background sync — keep SW alive even when page is backgrounded
 self.addEventListener('periodicsync', evt => {
-  if (evt.tag === 'keepalive') {
-    evt.waitUntil(Promise.resolve())
-  }
+  if (evt.tag === 'keepalive') evt.waitUntil(Promise.resolve())
 })

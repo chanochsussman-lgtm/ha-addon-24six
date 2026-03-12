@@ -7,9 +7,9 @@
  *   3. Never crashes — always returns a safe default
  */
 
-function log(label, _ld) {
-  if (!_ld) { console.log(`[${label}] null response`); return }
-  console.log(`[${label}] keys:`, Object.keys(_ld))
+function log(label, raw) {
+  if (!raw) { console.log(`[${label}] null response`); return }
+  console.log(`[${label}] keys:`, Object.keys(raw))
   // Log each key's shape
   Object.entries(raw).forEach(([k, v]) => {
     if (Array.isArray(v))
@@ -22,7 +22,7 @@ function log(label, _ld) {
 }
 
 // Find any array of items with .id in an object, walking one level deep
-export function findArray(_fa, preferKeys = []) {
+export function findArray(raw, preferKeys = []) {
   if (!raw) return []
   if (Array.isArray(raw)) return raw
   // Try preferred keys first
