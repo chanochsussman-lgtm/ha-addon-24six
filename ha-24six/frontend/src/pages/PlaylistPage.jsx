@@ -1,3 +1,4 @@
+import { useLongPress } from '../hooks/useLongPress.js'
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -12,7 +13,6 @@ export default function PlaylistPage() {
   const [loading, setLoading] = useState(true)
   const [menu,    setMenu]    = useState(null)
   const { playTrack, track: cur, playing } = usePlayer()
-  const holdTimers = useRef({})
 
   const path        = window.location.pathname
   const isFavorites = !id || id === 'favorites' || path.endsWith('/favorites')
@@ -38,8 +38,16 @@ export default function PlaylistPage() {
   const allTracks = songs.map(toTrack).filter(Boolean)
   const imgUrl    = meta?.img ? api.imgUrl(meta.img) : null
 
-  const onPD = (s, i) => () => { holdTimers.current[i] = setTimeout(() => setMenu({ song: toTrack(s), queue: allTracks, idx: i }), 500) }
-  const onPU = i      => () => clearTimeout(holdTimers.current[i])
+  const makeLongPress = (s, i) => {
+    const trigger = () => setMenu({ song: toTrack(s), queue: allTracks, idx: i })
+    return {
+      onPointerDown:   (e) => { if (e.button === 2) return; e.currentTarget._lpt = setTimeout(trigger, 500) },
+      onPointerUp:     (e) => clearTimeout(e.currentTarget._lpt),
+      onPointerCancel: (e) => clearTimeout(e.currentTarget._lpt),
+      onPointerMove:   (e) => clearTimeout(e.currentTarget._lpt),
+      onContextMenu:   (e) => { e.preventDefault(); clearTimeout(e.currentTarget._lpt); trigger() },
+    }
+  }
 
   return (
     <div>
@@ -54,7 +62,12 @@ export default function PlaylistPage() {
           </div>
           <div style={{ textAlign:'center' }}>
             <div style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>{meta?.title || meta?.name || (isFavorites ? 'My Favorites' : 'Playlist')}</div>
-            <div style={{ fontSize:12, color:'var(--muted)', marginTop:3 }}>{allTracks.length} tracks</div>
+            <div style={{ fontSize:12, color:'var(--muted)', marginTop:3 }}>
+              {[
+                allTracks.length > 0 && `${allTracks.length} tracks`,
+                meta?.time > 0 && `${Math.round(meta.time / 60)} min`,
+              ].filter(Boolean).join(' · ')}
+            </div>
           </div>
           <button onClick={() => allTracks.length && playTrack(allTracks[0], allTracks, 0)}
             style={{ background:'var(--accent)', color:'#000', fontWeight:700, fontSize:14, padding:'11px 32px', borderRadius:30, display:'flex', alignItems:'center', gap:7, border:'none', cursor:'pointer', opacity: allTracks.length ? 1 : 0.4 }}>
@@ -71,7 +84,7 @@ export default function PlaylistPage() {
           return (
             <div key={s.id || i} className="tappable"
               onClick={() => t && playTrack(t, allTracks, i)}
-              onPointerDown={onPD(s, i)} onPointerUp={onPU(i)} onPointerCancel={onPU(i)}
+              {...makeLongPress(s, i)}
               style={{ display:'flex', alignItems:'center', gap:12, padding:'9px 16px', background:isActive?'rgba(200,168,75,0.08)':'transparent', borderBottom:'1px solid rgba(255,255,255,0.04)', userSelect:'none' }}>
               <div style={{ width:28, textAlign:'center', flexShrink:0 }}>
                 {isActive ? <span style={{ color:'var(--accent)', fontSize:16 }}>♪</span>

@@ -59,3 +59,12 @@ button { font-family: inherit; cursor: pointer; border: none; outline: none; }
   from { transform: translateY(100%); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
+/* Song grid responsive layout */
+.song-grid-wide   { display: none; }
+.song-grid-narrow { display: block; }
+
+@media (min-width: 700px) {
+  .song-grid-wide   { display: block; }
+  .song-grid-narrow { display: none; }
+}

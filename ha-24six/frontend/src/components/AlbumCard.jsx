@@ -1,3 +1,4 @@
+import { useLongPress } from '../hooks/useLongPress.js'
 import React, { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -8,7 +9,7 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
   const nav = useNavigate()
   const { playTrack } = usePlayer()
   const [menu, setMenu] = useState(false)
-  const holdTimer = useRef(null)
+
   const moved = useRef(false)
 
   if (!item) return null

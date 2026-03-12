@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { usePlayer } from '../store/index.jsx'
 import { api } from '../api'
 import CastModal from './CastModal'
+import SpeakerDock from './SpeakerDock'
 
 function fmt(s) {
   if (!s || isNaN(s)) return '0:00'
@@ -36,7 +37,7 @@ function DragBar({ value, max=1, onChange, onCommit, height=5, accentColor='var(
 }
 
 // ── Volume bar with mute button ─────────────────────────────────────────────
-function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName }) {
+function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName, onOpenDock }) {
   const pct = Math.round(volume * 100)
   const onWheel = (e) => { e.preventDefault(); applyVolume(volume + (e.deltaY < 0 ? 0.05 : -0.05)) }
 
@@ -44,16 +45,24 @@ function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName }
     <div style={{ marginTop:20 }} onWheel={onWheel}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-          {/* Mute button — does NOT move slider */}
+          {/* Mute button */}
           <button onClick={toggleMute} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center', opacity: muted ? 1 : 0.5 }}>
             {muted
               ? <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
               : <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
             }
           </button>
-          <span style={{ fontSize:10, color:'rgba(255,255,255,0.3)', textTransform:'uppercase', letterSpacing:0.8 }}>
-            {muted ? 'MUTED — ' : ''}{activeSpeakerName}
-          </span>
+          {/* Speaker name — tappable, opens dock */}
+          <button onClick={onOpenDock} style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 6px', borderRadius:6, display:'flex', alignItems:'center', gap:5,
+            background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
+              <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+            </svg>
+            <span style={{ fontSize:10, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:0.8 }}>
+              {muted ? 'MUTED — ' : ''}{activeSpeakerName}
+            </span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)"><path d="M7 10l5 5 5-5z"/></svg>
+          </button>
         </div>
         <span style={{ fontSize:12, color: muted ? 'var(--muted)' : 'var(--accent)', fontWeight:700 }}>
           {muted ? 'muted' : `${pct}%`}
@@ -68,11 +77,168 @@ function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName }
   )
 }
 
+
+// ── Inline speaker strip (always visible in full player) ─────────────────────
+function InlineSpeakerStrip() {
+  const [speakers, setSpeakers]   = useState([])
+  const [expanded, setExpanded]   = useState(false)
+  const { track, playing, progress, activeSpeaker, setCastTarget, applyVolume } = usePlayer()
+  const base = window.ingressPath || ''
+
+  useEffect(() => {
+    fetch(`${base}/api/ha/speakers`)
+      .then(r => r.json())
+      .then(d => setSpeakers(Array.isArray(d) ? d : d?.speakers || []))
+      .catch(() => {})
+  }, [])
+
+  // Poll every 10s
+  useEffect(() => {
+    const t = setInterval(() => {
+      fetch(`${base}/api/ha/speakers`)
+        .then(r => r.json())
+        .then(d => setSpeakers(Array.isArray(d) ? d : d?.speakers || []))
+        .catch(() => {})
+    }, 10000)
+    return () => clearInterval(t)
+  }, [])
+
+  const castTo = async (sp) => {
+    setCastTarget(sp.entity_id, sp.name)
+    if (track) {
+      // Sync: send current track + seek position
+      await fetch(`${base}/api/ha/play`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entity_id: sp.entity_id,
+          content_id: track.id,
+          content_type: 'music',
+          position: Math.floor(progress || 0),
+        })
+      }).catch(() => {})
+    }
+  }
+
+  const setVol = async (entityId, vol) => {
+    if (entityId === 'local') { applyVolume(vol); return }
+    await fetch(`${base}/api/ha/volume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity_id: entityId, volume_level: vol })
+    }).catch(() => {})
+  }
+
+  const allSpeakers = [
+    { entity_id: 'local', name: 'This Device', state: playing ? 'playing' : 'paused', volume_level: null },
+    ...speakers
+  ]
+
+  const PREVIEW = 2  // show 2 speakers collapsed, expand to show all
+  const shown = expanded ? allSpeakers : allSpeakers.slice(0, PREVIEW)
+
+  return (
+    <div style={{ marginTop:16, borderTop:'1px solid var(--border)', paddingTop:14 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+        <span style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', letterSpacing:0.8 }}>Speakers</span>
+        {allSpeakers.length > PREVIEW && (
+          <button onClick={() => setExpanded(e=>!e)}
+            style={{ background:'none', border:'none', cursor:'pointer', color:'var(--accent)', fontSize:11, padding:0 }}>
+            {expanded ? 'Show less ▲' : `+${allSpeakers.length - PREVIEW} more ▼`}
+          </button>
+        )}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {shown.map(sp => {
+          const isActive = activeSpeaker ? sp.entity_id === activeSpeaker : sp.entity_id === 'local'
+          return (
+            <div key={sp.entity_id}
+              style={{ background: isActive ? 'rgba(200,168,75,0.1)' : 'rgba(255,255,255,0.04)',
+                border: `1px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius:10, padding:'10px 12px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ width:30, height:30, borderRadius:7, background: isActive ? 'rgba(200,168,75,0.15)' : 'rgba(255,255,255,0.06)',
+                  display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill={isActive ? 'var(--accent)' : 'rgba(255,255,255,0.4)'}>
+                    {sp.entity_id === 'local'
+                      ? <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                      : <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+                    }
+                  </svg>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight: isActive?600:400, color: isActive?'var(--accent)':'var(--text)',
+                    whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{sp.name}</div>
+                  <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginTop:1 }}>
+                    {sp.state === 'playing' ? '▶ Playing' : sp.state === 'paused' ? '⏸ Paused' : sp.state || 'Idle'}
+                  </div>
+                </div>
+                {!isActive && (
+                  <button onClick={() => castTo(sp)}
+                    style={{ background:'var(--accent)', color:'#000', fontSize:10, fontWeight:700,
+                      padding:'4px 10px', borderRadius:8, border:'none', cursor:'pointer', flexShrink:0 }}>
+                    CAST
+                  </button>
+                )}
+                {isActive && (
+                  <span style={{ fontSize:9, background:'var(--accent)', color:'#000', fontWeight:700,
+                    padding:'2px 7px', borderRadius:8, flexShrink:0 }}>ACTIVE</span>
+                )}
+              </div>
+              {/* Volume slider */}
+              {sp.state !== 'off' && sp.state !== 'unavailable' && (
+                <SpeakerVolumeSlider
+                  entityId={sp.entity_id}
+                  initial={sp.volume_level}
+                  onChange={setVol}
+                />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function SpeakerVolumeSlider({ entityId, initial, onChange }) {
+  const { volume } = usePlayer()
+  const [val, setVal] = useState(
+    entityId === 'local' ? Math.round(volume * 100) : Math.round((initial ?? 0.5) * 100)
+  )
+  const debounce = useRef(null)
+
+  // Keep local slider in sync with store volume
+  useEffect(() => {
+    if (entityId === 'local') setVal(Math.round(volume * 100))
+  }, [volume, entityId])
+
+  const handle = (v) => {
+    setVal(v)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => onChange(entityId, v / 100), 250)
+  }
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8 }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)">
+        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+      </svg>
+      <input type="range" min="0" max="100" value={val}
+        onChange={e => handle(Number(e.target.value))}
+        style={{ flex:1, accentColor:'var(--accent)', cursor:'pointer' }}
+      />
+      <span style={{ fontSize:10, color:'rgba(255,255,255,0.35)', minWidth:26, textAlign:'right' }}>{val}%</span>
+    </div>
+  )
+}
+
 // ── Full-screen player ───────────────────────────────────────────────────────
 function FullPlayer({ onClose }) {
   const { track, playing, progress, duration, loading, togglePlay, seek,
           playNext, playPrev, volume, muted, activeSpeakerName, applyVolume, toggleMute, queue, qIdx } = usePlayer()
   const [showCast, setShowCast] = useState(false)
+  const [showDock, setShowDock] = useState(false)
   const [showQueue, setShowQueue] = useState(false)
   const pct = duration > 0 ? (progress/duration)*100 : 0
   const imgUrl = track?.img ? api.imgUrl(track.img) : null
@@ -180,11 +346,15 @@ function FullPlayer({ onClose }) {
             </button>
           </div>
 
-          <VolumeBar volume={volume} muted={muted} applyVolume={applyVolume} toggleMute={toggleMute} activeSpeakerName={activeSpeakerName} />
+          <VolumeBar volume={volume} muted={muted} applyVolume={applyVolume} toggleMute={toggleMute} activeSpeakerName={activeSpeakerName} onOpenDock={() => setShowDock(true)} />
+
+          {/* Always-visible speaker strip */}
+          <InlineSpeakerStrip />
         </div>
       </div>
 
       {showCast && <CastModal track={track} onClose={() => setShowCast(false)} />}
+      {showDock && <SpeakerDock onClose={() => setShowDock(false)} />}
     </div>
   )
 }

@@ -297,30 +297,63 @@ app.get('/api/collections/:id/songs', (req, res) => proxy(req, res, `/app/conten
 // Songs
 app.get('/api/songs/:id', (req, res) => proxy(req, res, `/app/content/${req.params.id}`));
 
-// Search - quick autocomplete
-app.get('/api/search/quick', (req, res) => {
+// Search - quick autocomplete (API requires POST)
+app.get('/api/search/quick', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
-  proxy(req, res, '/app/music/search/quick', { params: { q } });
+  try {
+    const url = `${BASE_URL}/app/music/search/quick`;
+    let response = await client({ method:'POST', url, data:{ q }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    if (response.status === 401 || response.status === 403) {
+      await doLogin();
+      response = await client({ method:'POST', url, data:{ q }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    }
+    console.log(`[search/quick] q="${q}" status=${response.status} keys=${JSON.stringify(Object.keys(response.data||{})).slice(0,100)}`);
+    res.json(response.data);
+  } catch(e) { console.error('[search/quick]', e.message); res.json([]); }
 });
 
-// Search - full results (songs, artists, albums, playlists by category)
-app.get('/api/search', (req, res) => {
+// Search - full results (API requires POST)
+app.get('/api/search', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json({});
-  proxy(req, res, `/app/music/search`, { params: { q } });
+  try {
+    const url = `${BASE_URL}/app/music/search`;
+    let response = await client({ method:'POST', url, data:{ q }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    if (response.status === 401 || response.status === 403) {
+      await doLogin();
+      response = await client({ method:'POST', url, data:{ q }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    }
+    console.log(`[search] q="${q}" status=${response.status} keys=${JSON.stringify(Object.keys(response.data||{})).slice(0,100)}`);
+    res.json(response.data);
+  } catch(e) { console.error('[search]', e.message); res.json({}); }
 });
 
 // ── Favorites / Library ───────────────────────────────────────────────────────
 app.get('/api/library/favorites', async (req, res) => {
+  // Favorites is a playlist — find it via my playlists list (automatic=true, mine=false, in_library=true)
+  // or hit the known favorites playlist endpoint directly
   try {
+    // First try: get my playlists and find the favorites one (automatic=true)
+    const listUrl = `${BASE_URL}/app/music/playlist`;
+    let listResp = await client({ method:'GET', url: listUrl, params:{ my: 1 }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    if (listResp.status === 401 || listResp.status === 403) { await doLogin(); listResp = await client({ method:'GET', url: listUrl, params:{ my: 1 }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true }); }
+    const playlists = Array.isArray(listResp.data) ? listResp.data
+                    : Array.isArray(listResp.data?.data) ? listResp.data.data : [];
+    // Find favorites playlist: automatic=true or title contains "favorite"
+    const favPlaylist = playlists.find(p => p.automatic === true || p.title?.toLowerCase().includes('favorite'));
+    if (favPlaylist?.id) {
+      const favUrl = `${BASE_URL}/app/music/playlist/${favPlaylist.id}`;
+      let favResp = await client({ method:'GET', url: favUrl, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+      if (favResp.status === 401 || favResp.status === 403) { await doLogin(); favResp = await client({ method:'GET', url: favUrl, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true }); }
+      console.log(`[favorites] found playlist id=${favPlaylist.id} status=${favResp.status}`);
+      return res.json(favResp.data);
+    }
+    // Fallback: try /app/music/favorite directly
     const url = `${BASE_URL}/app/music/favorite`;
     let response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
-    if (response.status === 401 || response.status === 403) {
-      await doLogin();
-      response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
-    }
-    console.log(`[favorites] status=${response.status} keys=${Object.keys(response.data||{}).join(',')}`);
+    if (response.status === 401 || response.status === 403) { await doLogin(); response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true }); }
+    console.log(`[favorites] fallback status=${response.status} keys=${Object.keys(response.data||{}).join(',')}`);
     res.json(response.data);
   } catch(e) { console.error('[favorites] error:', e.message); res.status(500).json({ error: e.message }); }
 });
@@ -470,32 +503,43 @@ app.get('/api/ha/speakers', async (req, res) => {
 // Cast a track to a HA media player using stable stream URL
 app.post('/api/ha/play', async (req, res) => {
   try {
-    const { entity_id, track_id, track_title } = req.body;
-    if (!entity_id || !track_id) return res.status(400).json({ error: 'entity_id and track_id required' });
+    // Accept content_id (new) or track_id (legacy)
+    const { entity_id, content_id, track_id, track_title, position } = req.body;
+    const id = content_id || track_id;
+    if (!entity_id || !id) return res.status(400).json({ error: 'entity_id and content_id required' });
 
-    // Build stable stream URL reachable by the media player on LAN
+    // Build stable stream URL — include position as query param for seek-on-start
     const base = await getAddonStreamBase();
-    const streamUrl = `${base}/api/stream/${track_id}`;
-    console.log('[ha] casting to', entity_id, 'url:', streamUrl);
+    const streamUrl = `${base}/api/stream/${id}`;
+    console.log('[ha] casting to', entity_id, 'track:', id, position ? `at ${position}s` : '');
 
-    // Wake device first if off (WiiM needs this)
+    // Wake device first if off
     const stateRes = await axios.get(`${HA_URL}/api/states/${entity_id}`, { headers: haHeaders() }).catch(() => null);
     const state = stateRes?.data?.state;
     if (state === 'off') {
       await axios.post(`${HA_URL}/api/services/media_player/turn_on`, { entity_id }, { headers: haHeaders() }).catch(() => {});
-      await new Promise(r => setTimeout(r, 1500)); // wait for device to wake
+      await new Promise(r => setTimeout(r, 1500));
     }
 
-    // Play via HA service
+    // Play via HA
     await axios.post(`${HA_URL}/api/services/media_player/play_media`, {
       entity_id,
       media_content_id: streamUrl,
       media_content_type: 'music',
       extra: {
         title: track_title || 'Now Playing',
-        metadata: { mediaType: 3 } // MUSIC type for Chromecast/WiiM
+        metadata: { mediaType: 3 }
       }
     }, { headers: haHeaders() });
+
+    // Seek to exact position if provided (let player buffer first)
+    if (position && position > 2) {
+      await new Promise(r => setTimeout(r, 2500));
+      await axios.post(`${HA_URL}/api/services/media_player/media_seek`, {
+        entity_id, seek_position: position
+      }, { headers: haHeaders() }).catch(() => {});
+      console.log('[ha] seeked to', position, 'on', entity_id);
+    }
 
     res.json({ ok: true, stream_url: streamUrl });
   } catch (e) {

@@ -55,7 +55,67 @@ export function PlayerProvider({ children }) {
     const onCan   = () => setLoading(false)
     const onEnd   = () => {
       const q=queueRef.current, i=qIdxRef.current
-      if (i < q.length-1) _playRef.current?.(q[i+1], q, i+1)
+      if (i < q.length-1) {
+        // More tracks in current queue — just play next
+        _playRef.current?.(q[i+1], q, i+1)
+      } else {
+        // End of queue — try to continue from artist
+        const t = trackRef.current
+        const artistId = t?.artistId || t?.artist_id
+        if (!artistId) return
+        const base = window.ingressPath || ''
+        fetch(`${base}/api/artists/${artistId}`)
+          .then(r => r.json())
+          .then(d => {
+            // Collect all songs from artist's albums in order
+            // top_songs are singles; albums have their own tracks we need to load
+            // Use albums list — navigate to each collection to get songs would be too many calls
+            // Instead use top_songs as the continuation queue, excluding already-played track
+            const topSongs = Array.isArray(d.top_songs) ? d.top_songs : []
+            const albums   = Array.isArray(d.albums)    ? d.albums    : []
+
+            // Build a continuation queue from top_songs (already full track objects)
+            const artistImg = d.artist?.img || d.img || t.img
+            const artistName = d.artist?.name || d.name || t.artist
+            const nextTracks = topSongs
+              .filter(s => s.id !== t.id)  // skip the one we just played
+              .map(s => ({
+                id:     s.id,
+                title:  s.title || s.name || '',
+                artist: s.artists?.map(a=>a.name).join(', ') || artistName,
+                img:    s.img || artistImg,
+                artistId: s.artist_id || artistId,
+                collectionId: s.collection_id || s.collectionId || null,
+              }))
+
+            if (nextTracks.length > 0) {
+              console.log(`[autoqueue] continuing with ${nextTracks.length} more tracks from artist ${artistId}`)
+              _playRef.current?.(nextTracks[0], nextTracks, 0)
+            } else if (albums.length > 0) {
+              // No top_songs — load first album's tracks
+              const nextAlbum = albums.find(a => a.id !== (t.collectionId)) || albums[0]
+              fetch(`${base}/api/collections/${nextAlbum.id}`)
+                .then(r => r.json())
+                .then(ad => {
+                  const songs = Array.isArray(ad.collection?.contents) ? ad.collection.contents : []
+                  const albumTracks = songs.map(s => ({
+                    id:     s.id,
+                    title:  s.title || s.name || '',
+                    artist: s.artists?.map(a=>a.name).join(', ') || artistName,
+                    img:    s.img || ad.collection?.img || artistImg,
+                    artistId: artistId,
+                    collectionId: nextAlbum.id,
+                  }))
+                  if (albumTracks.length > 0) {
+                    console.log(`[autoqueue] continuing with album ${nextAlbum.id} (${albumTracks.length} tracks)`)
+                    _playRef.current?.(albumTracks[0], albumTracks, 0)
+                  }
+                })
+                .catch(() => {})
+            }
+          })
+          .catch(() => {})
+      }
     }
     audio.addEventListener('timeupdate',     onTime)
     audio.addEventListener('durationchange', onDur)

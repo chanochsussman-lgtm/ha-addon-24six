@@ -10,26 +10,40 @@ export default function Home() {
   const [recent,   setRecent]   = useState([])
   const [loading,  setLoading]  = useState(true)
 
-  const loadRecent = () =>
-    api.recent().catch(() => null).then(d => setRecent(extractRecent(d)))
-
-  useEffect(() => {
+  const load = () => {
+    // Single call — home response contains banners, recent, and all sections
     Promise.all([
       api.home().catch(() => null),
-      api.banners().catch(() => null),
-      api.recent().catch(() => null),
-    ]).then(([home, ban, rec]) => {
-      const { sections } = extractHome(home || {})
+      api.recent().catch(() => null),  // local play history merged with API
+    ]).then(([home, rec]) => {
+      const d = home || {}
+
+      // Banners come from home.banners (confirmed in API response)
+      setBanners(extractBanners(d.banners || d.banner))
+
+      // Recent: merge home.recent (API history) with local play records
+      const apiRecent  = Array.isArray(d.recent) ? d.recent : []
+      const localMerge = extractRecent(rec)  // { local:[], api:... } from server
+      const localIds   = new Set(localMerge.map(i => i.id))
+      const merged     = [...localMerge, ...apiRecent.filter(i => i.id && !localIds.has(i.id))].slice(0, 30)
+      setRecent(merged)
+
+      // All other sections
+      const { sections } = extractHome(d)
       setSections(sections)
-      setBanners(extractBanners(ban))
-      setRecent(extractRecent(rec))
       setLoading(false)
     })
-  }, [])
+  }
+
+  useEffect(() => { load() }, [])
 
   // Refresh recent every 60s
   useEffect(() => {
-    const t = setInterval(loadRecent, 60_000)
+    const t = setInterval(() => {
+      api.recent().catch(() => null).then(rec => {
+        if (rec) setRecent(extractRecent(rec))
+      })
+    }, 60_000)
     return () => clearInterval(t)
   }, [])
 
@@ -40,12 +54,13 @@ export default function Home() {
     </div>
   )
 
-  const recentItems = recent.map(r => normItem({ ...r, type: r.type === 'content' ? 'song' : (r.type || 'song') }))
-                            .filter(i => i?.id)
+  const recentItems = recent
+    .map(r => normItem({ ...r, type: r.type === 'content' ? 'song' : (r.type || 'song') }))
+    .filter(i => i?.id)
 
   return (
     <div>
-      <div style={{ padding:'18px 16px 10px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ padding:'18px 16px 10px' }}>
         <div style={{ fontSize:22, fontWeight:700, color:'var(--accent)', letterSpacing:-0.5 }}>24Six</div>
       </div>
 
@@ -69,7 +84,7 @@ export default function Home() {
       })}
 
       {recentItems.length > 0 && (
-        <SectionRow title="Recently Listened" items={recentItems} cardSize={100} />
+        <SectionRow title="Recently Listened" items={recentItems.map(i => ({ ...i, type:'song' }))} cardSize={100} />
       )}
 
       <div style={{ height:16 }} />
