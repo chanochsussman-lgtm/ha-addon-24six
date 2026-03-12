@@ -111,10 +111,10 @@ export function extractHome(d) {
 
   // Every other array key — fully dynamic, zero hardcoding
   Object.entries(d).forEach(([k, v]) => {
+    if (skip.has(k) || !Array.isArray(v)) return
     const vv = v.filter(Boolean)  // strip null/undefined slots (e.g. myPlaylists: [,...])
-    if (skip.has(k) || !vv.length || !vv[0]?.id) return
+    if (!vv.length || !vv[0]?.id) return
     const sample = vv[0]
-    // sample already declared above
     const looksLikeArtist = !!(sample.name && !sample.title && !sample.release_date)
     const keyLooksLikeArtist     = /artist/i.test(k)
     const keyLooksLikeCollection = /album|single|stor|playlist|collection|mix/i.test(k)
