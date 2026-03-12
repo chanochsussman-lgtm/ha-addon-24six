@@ -12,8 +12,8 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
   const moved = useRef(false)
 
   if (!item) return null
-  const imgUrl = (type === 'category') ? null : api.imgUrl(item.img)
   const type   = item.type || 'collection'
+  const imgUrl = (type === 'category') ? null : api.imgUrl(item.img)
   const isSong = type === 'song' || type === 'content'
 
   const toTrack = (s) => ({
