@@ -50,12 +50,12 @@ export function PlayerProvider({ children }) {
     const onTime  = () => { setProgress(audio.currentTime); progressRef.current = audio.currentTime }
     const onDur   = () => { const d = isNaN(audio.duration)?0:audio.duration; setDuration(d); durationRef.current=d }
     const onPlay  = () => {
-      setPlaying(true); playingRef.current=true; setLoading(false); _updatePositionState()
+      setPlaying(true); playingRef.current=true; setLoading(false)
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
-      window.__resumeAudioIfPlaying = () => audioEl.play().catch(() => {})
+      window.__resumeAudioIfPlaying = () => audio.play().catch(() => {})
     }
     const onPause = () => {
-      setPlaying(false); playingRef.current=false; _updatePositionState()
+      setPlaying(false); playingRef.current=false
       if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
     }
     const onWait  = () => setLoading(true)
@@ -299,7 +299,7 @@ export function PlayerProvider({ children }) {
     }
     const onResume = () => {
       if (playingRef.current) {
-        audioEl.play().catch(() => {})
+        audio.play().catch(() => {})
       }
     }
     window.addEventListener('freeze',   onFreeze)
