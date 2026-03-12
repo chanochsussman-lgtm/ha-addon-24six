@@ -1,4 +1,3 @@
-import { useLongPress } from '../hooks/useLongPress.js'
 import React, { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
@@ -9,7 +8,7 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
   const nav = useNavigate()
   const { playTrack } = usePlayer()
   const [menu, setMenu] = useState(false)
-
+  const holdTimer = useRef(null)
   const moved = useRef(false)
 
   if (!item) return null
@@ -26,39 +25,32 @@ export default function AlbumCard({ item, size = 120, circle = false, rowQueue =
 
   const go = () => {
     if (isSong) {
-      // Use the row queue if available, otherwise just this song
       const q   = rowQueue?.length ? rowQueue : [toTrack(item)]
       const idx = rowQueue?.length ? rowQueueIdx : 0
       playTrack(q[idx], q, idx)
-    } else if (type === 'artist') {
-      nav(`/artist/${item.id}`)
-    } else if (type === 'playlist') {
-      nav(`/playlist/${item.id}`)
-    } else {
-      nav(`/collection/${item.id}`)
-    }
+    } else if (type === 'artist')   nav(`/artist/${item.id}`)
+    else if (type === 'playlist')   nav(`/playlist/${item.id}`)
+    else                            nav(`/collection/${item.id}`)
   }
 
-  const onPointerDown = () => {
+  const onPointerDown = (e) => {
+    if (e.button === 2) return
     moved.current = false
     holdTimer.current = setTimeout(() => {
       if (!moved.current && isSong) setMenu(true)
     }, 500)
   }
-  const onPointerMove   = () => { moved.current = true }
+  const onPointerMove   = () => { moved.current = true; clearTimeout(holdTimer.current) }
   const onPointerUp     = () => clearTimeout(holdTimer.current)
+  const onContextMenu   = (e) => { e.preventDefault(); clearTimeout(holdTimer.current); if (isSong) setMenu(true) }
 
   return (
     <>
-      <div
-        className="tappable"
-        onClick={go}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        style={{ width:size, flexShrink:0, userSelect:'none' }}
-      >
+      <div className="tappable" onClick={go}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+        onContextMenu={onContextMenu}
+        style={{ width:size, flexShrink:0, userSelect:'none' }}>
         <div style={{ width:size, height:size, borderRadius:circle?'50%':10, overflow:'hidden', background:'var(--card)', marginBottom:6 }}>
           {imgUrl
             ? <img src={imgUrl} style={{ width:'100%', height:'100%', objectFit:'cover' }} loading="lazy" />
