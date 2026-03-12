@@ -259,7 +259,7 @@ export function PlayerProvider({ children }) {
           // Build minimal track object and play it
           // Full metadata will come from the API
           const base = window.ingressPath || ''
-          fetch(\`\${base}/api/audio/\${msg.track_id}\`)
+          fetch(`${base}/api/audio/${msg.track_id}`)
             .then(r => r.json())
             .then(data => {
               const track = { id: msg.track_id, title: msg.track_title || 'Track', artist: '', img: '' }
