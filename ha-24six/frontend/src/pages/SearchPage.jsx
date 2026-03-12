@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import { usePlayer } from '../store/index.jsx'
 import ContextMenu from '../components/ContextMenu'
+import { extractSearch, extractQuickSearch } from '../extract.js'
 
 const TABS = ['Top', 'Songs', 'Artists', 'Albums', 'Playlists']
 
@@ -11,11 +12,12 @@ function Spinner() {
 }
 
 function parseSections(data) {
-  if (!data || typeof data !== 'object') return []
+  const d = extractSearch(data)
+  if (!d || typeof d !== 'object') return []
   const out = []
   const try_ = (keys, label, type) => {
     for (const k of keys) {
-      const v = data[k]
+      const v = d[k]
       const arr = Array.isArray(v) ? v : Array.isArray(v?.data) ? v.data : null
       if (arr?.length) { out.push({ label, items:arr, type }); return }
     }
@@ -25,7 +27,7 @@ function parseSections(data) {
   try_(['albums','collections'], 'Albums', 'collection')
   try_(['playlists'], 'Playlists', 'playlist')
   const known = new Set(['songs','content','tracks','artists','albums','collections','playlists'])
-  Object.entries(data).forEach(([k,v]) => {
+  Object.entries(d).forEach(([k,v]) => {
     if (!known.has(k) && Array.isArray(v) && v.length && v[0]?.id)
       out.push({ label:k, items:v, type:'collection' })
   })
