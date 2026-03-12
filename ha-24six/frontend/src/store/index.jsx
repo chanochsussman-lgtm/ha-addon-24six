@@ -3,6 +3,26 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 const Ctx = createContext(null)
 const audio = new Audio()
 
+// ── Web Audio API routing ────────────────────────────────────────────────────
+// Route audio through a GainNode so our volume slider is the true master.
+// This also lets us read back changes the OS/browser makes to audio.volume.
+let audioCtx = null
+let gainNode = null
+let sourceNode = null
+
+function ensureAudioContext() {
+  if (audioCtx) return
+  try {
+    audioCtx  = new (window.AudioContext || window.webkitAudioContext)()
+    gainNode  = audioCtx.createGain()
+    gainNode.connect(audioCtx.destination)
+    sourceNode = audioCtx.createMediaElementSource(audio)
+    sourceNode.connect(gainNode)
+  } catch (e) {
+    console.warn('[audio] Web Audio API unavailable:', e.message)
+  }
+}
+
 export function PlayerProvider({ children }) {
   const [track,             setTrack]             = useState(null)
   const [queue,             setQueue]             = useState([])
@@ -190,10 +210,18 @@ export function PlayerProvider({ children }) {
   // ── Volume ───────────────────────────────────────────────────────────────
   const applyVolume = useCallback((v) => {
     const clamped = Math.max(0, Math.min(1, v))
-    setVolume(clamped); volumeRef.current = clamped
+    setVolume(clamped)
+    volumeRef.current = clamped
+
     if (activeSpeakerRef.current === 'local') {
-      audio.volume = clamped
+      // Use GainNode if available (Web Audio API), fallback to audio.volume
+      if (gainNode) {
+        gainNode.gain.setTargetAtTime(clamped, audioCtx.currentTime, 0.01)
+      } else {
+        audio.volume = clamped
+      }
     } else {
+      // Cast speaker — send to HA
       clearTimeout(volDebounce.current)
       volDebounce.current = setTimeout(() => {
         const base = window.ingressPath || ''
@@ -203,6 +231,25 @@ export function PlayerProvider({ children }) {
         }).catch(()=>{})
       }, 80)
     }
+  }, [])
+
+  // ── Sync OS/browser volume changes back to our slider ───────────────────
+  // On PC: browser media keys, Windows volume overlay, macOS media keys,
+  // and the browser's own volume control all fire 'volumechange' on the element.
+  useEffect(() => {
+    const onVolumeChange = () => {
+      if (activeSpeakerRef.current !== 'local') return
+      const v = audio.volume
+      // Only sync if meaningfully different (avoid feedback loop)
+      if (Math.abs(v - volumeRef.current) > 0.01) {
+        setVolume(v)
+        volumeRef.current = v
+        // Also apply to gainNode to keep them in sync
+        if (gainNode) gainNode.gain.setTargetAtTime(v, audioCtx.currentTime, 0.01)
+      }
+    }
+    audio.addEventListener('volumechange', onVolumeChange)
+    return () => audio.removeEventListener('volumechange', onVolumeChange)
   }, [])
 
   // Hardware volume keys (keyboard event)
@@ -239,7 +286,17 @@ export function PlayerProvider({ children }) {
       if (!url) throw new Error('No URL: ' + JSON.stringify(data))
 
       console.log('[player] src:', url.slice(0, 80))
-      audio.volume = volumeRef.current
+      // Resume / create AudioContext (requires user gesture — play click counts)
+      ensureAudioContext()
+      if (audioCtx && audioCtx.state === 'suspended') {
+        await audioCtx.resume().catch(() => {})
+      }
+      // Set initial gain
+      if (gainNode) {
+        gainNode.gain.value = volumeRef.current
+      } else {
+        audio.volume = volumeRef.current
+      }
       audio.src = url
       audio.load()
       await audio.play()

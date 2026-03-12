@@ -174,6 +174,12 @@ async function proxy(req, res, urlPath, options = {}) {
       validateStatus: () => true
     });
     console.log(`[proxy] ${method} ${urlPath} → ${response.status}`);
+    // Shape log for debugging
+    if (process.env.DEBUG_SHAPE || ['/app/music/banner','/app/music/search/quick','/app/music/search'].some(p => urlPath.startsWith(p)) || urlPath.match(/\/app\/music\/artist\/\d+/)) {
+      const d = response.data;
+      const preview = typeof d === 'object' ? JSON.stringify(d).slice(0, 400) : String(d).slice(0, 200);
+      console.log(`[shape] ${urlPath} keys=${Array.isArray(d)?'array['+d.length+']':Object.keys(d||{}).join(',')} preview=${preview}`);
+    }
 
     if (response.status === 401 || response.status === 403) {
       console.log('[proxy] Auth expired, re-logging in...');
@@ -229,12 +235,35 @@ app.get('/api/debug/recent',           (req, res) => proxy(req, res, '/app/music
 
 // Music API Routes ──────────────────────────────────────────────────────────
 app.get('/api/home',            (req, res) => proxy(req, res, '/app/music'));
-app.get('/api/banners',         (req, res) => proxy(req, res, '/app/music/banner'));
+app.get('/api/banners', async (req, res) => {
+  try {
+    const url = `${BASE_URL}/app/music/banner`;
+    const response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    const d = response.data;
+    const arr = Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : [d]);
+    console.log(`[banners] count=${arr.length} first_keys=${arr[0]?Object.keys(arr[0]).join(','):'n/a'} preview=${JSON.stringify(arr[0]).slice(0,300)}`);
+    res.json(arr);
+  } catch(e) { console.error('[banners] error:', e.message); res.json([]); }
+});
 app.get('/api/browse/recent',   (req, res) => proxy(req, res, '/app/music/content/recent'));
 app.get('/api/categories',      (req, res) => proxy(req, res, '/app/music/category'));
 app.get('/api/categories/:id',  (req, res) => proxy(req, res, `/app/music/category/${req.params.id}`));
 app.get('/api/artists',         (req, res) => proxy(req, res, '/app/music/artist'));
-app.get('/api/artists/:id',     (req, res) => proxy(req, res, `/app/music/artist/${req.params.id}`));
+app.get('/api/artists/:id', async (req, res) => {
+  try {
+    const url = `${BASE_URL}/app/music/artist/${req.params.id}`;
+    const response = await client({ method:'GET', url, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    console.log(`[artist/${req.params.id}] status=${response.status}`);
+    const d = response.data;
+    console.log(`[artist/${req.params.id}] keys=${Object.keys(d||{}).join(',')} preview=${JSON.stringify(d).slice(0,400)}`);
+    if (response.status === 401 || response.status === 403) { await doLogin(); return res.redirect(req.originalUrl); }
+    // Normalize: always return { artist, top_songs, collections }
+    let artist = d.artist || d.data?.artist || (d.id ? d : null) || {};
+    let top_songs = d.top_songs || d.data?.top_songs || d.songs || d.data?.songs || d.content || d.data?.content || [];
+    let collections = d.collections || d.data?.collections || d.albums || d.data?.albums || [];
+    res.json({ artist, top_songs, collections, _raw_keys: Object.keys(d) });
+  } catch(e) { console.error('[artist] error:', e.message); res.status(500).json({ error: e.message }); }
+});
 app.get('/api/playlists',       (req, res) => proxy(req, res, '/app/music/playlist'));
 app.get('/api/playlists/:id',   (req, res) => proxy(req, res, `/app/music/playlist/${req.params.id}`));
 app.get('/api/stories',         (req, res) => proxy(req, res, '/app/story'));
@@ -248,10 +277,27 @@ app.get('/api/collections/:id/songs', (req, res) => proxy(req, res, `/app/conten
 app.get('/api/songs/:id', (req, res) => proxy(req, res, `/app/content/${req.params.id}`));
 
 // Search - quick autocomplete (typeahead)
-app.get('/api/search/quick', (req, res) => {
+app.get('/api/search/quick', async (req, res) => {
   const { q } = req.query;
   if (!q) return res.json([]);
-  proxy(req, res, `/app/music/search/quick`, { params: { q } });
+  try {
+    const url = `${BASE_URL}/app/music/search/quick`;
+    const response = await client({ method:'GET', url, params:{ q }, headers:{ 'Accept':'application/json','Content-Type':'application/json' }, validateStatus:()=>true });
+    const d = response.data;
+    console.log(`[search/quick] q="${q}" status=${response.status} keys=${Array.isArray(d)?'array['+d.length+']':Object.keys(d||{}).join(',')} preview=${JSON.stringify(d).slice(0,300)}`);
+    // Normalize to flat array
+    let items = [];
+    if (Array.isArray(d)) items = d;
+    else if (Array.isArray(d?.data)) items = d.data;
+    else if (Array.isArray(d?.results)) items = d.results;
+    else {
+      // merge sections
+      ['songs','content','tracks','artists','albums','collections','playlists'].forEach(k => {
+        if (Array.isArray(d?.[k])) items.push(...d[k].slice(0,3).map(x => ({...x, _type:k})));
+      });
+    }
+    res.json(items);
+  } catch(e) { console.error('[search/quick] error:', e.message); res.json([]); }
 });
 
 // Search - full results (songs, artists, albums, playlists by category)
