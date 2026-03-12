@@ -243,11 +243,13 @@ app.get('/api/debug/playlist/:id',     (req, res) => proxy(req, res, `/app/music
 app.get('/api/debug/recent',           (req, res) => proxy(req, res, '/app/music/content/recent'));
 
 // Music API Routes ──────────────────────────────────────────────────────────
-app.get('/api/home',            (req, res) => proxy(req, res, '/app/music'));
+app.get('/api/home', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  proxy(req, res, '/app/music');
+});
 app.get('/api/banners',         (req, res) => proxy(req, res, '/app/music/banner'));
 app.get('/api/browse/recent', async (req, res) => {
-  // Return: { local: [...], api: <raw api response> }
-  // Frontend merges and dedupes — sees the full raw API shape
+  res.set('Cache-Control', 'no-store');
   const local = loadRecent();
   try {
     const url = `${BASE_URL}/app/music/content/recent`;

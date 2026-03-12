@@ -11,39 +11,32 @@ export default function Home() {
   const [loading,  setLoading]  = useState(true)
 
   const load = () => {
-    // Single call — home response contains banners, recent, and all sections
-    Promise.all([
-      api.home().catch(() => null),
-      api.recent().catch(() => null),  // local play history merged with API
-    ]).then(([home, rec]) => {
-      const d = home || {}
+    // Home call only — recent is already inside home response
+    api.home().catch(() => null).then(home => {
+      try {
+        const d = home || {}
+        console.log('[Home] loaded, keys:', Object.keys(d))
 
-      // Banners come from home.banners (confirmed in API response)
-      setBanners(extractBanners(d.banners || d.banner))
+        setBanners(extractBanners(d.banners || d.banner))
 
-      // Recent: merge home.recent (API history) with local play records
-      const apiRecent  = Array.isArray(d.recent) ? d.recent : []
-      const localMerge = extractRecent(rec)  // { local:[], api:... } from server
-      const localIds   = new Set(localMerge.map(i => i.id))
-      const merged     = [...localMerge, ...apiRecent.filter(i => i.id && !localIds.has(i.id))].slice(0, 30)
-      setRecent(merged)
+        // recent is inside home response directly
+        const apiRecent = Array.isArray(d.recent) ? d.recent : []
+        setRecent(apiRecent)
 
-      // All other sections
-      const { sections } = extractHome(d)
-      setSections(sections)
+        const { sections } = extractHome(d)
+        setSections(sections)
+      } catch(e) {
+        console.error('[Home] render error:', e)
+      }
       setLoading(false)
     })
   }
 
   useEffect(() => { load() }, [])
 
-  // Refresh recent every 60s
+  // Refresh home every 60s (recent is inside home response)
   useEffect(() => {
-    const t = setInterval(() => {
-      api.recent().catch(() => null).then(rec => {
-        if (rec) setRecent(extractRecent(rec))
-      })
-    }, 60_000)
+    const t = setInterval(load, 60_000)
     return () => clearInterval(t)
   }, [])
 
