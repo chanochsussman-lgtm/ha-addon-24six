@@ -49,8 +49,15 @@ export function PlayerProvider({ children }) {
   useEffect(() => {
     const onTime  = () => { setProgress(audio.currentTime); progressRef.current = audio.currentTime }
     const onDur   = () => { const d = isNaN(audio.duration)?0:audio.duration; setDuration(d); durationRef.current=d }
-    const onPlay  = () => { setPlaying(true);  playingRef.current=true;  setLoading(false);  _updatePositionState() }
-    const onPause = () => { setPlaying(false); playingRef.current=false; _updatePositionState() }
+    const onPlay  = () => {
+      setPlaying(true); playingRef.current=true; setLoading(false); _updatePositionState()
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'
+      window.__resumeAudioIfPlaying = () => audioEl.play().catch(() => {})
+    }
+    const onPause = () => {
+      setPlaying(false); playingRef.current=false; _updatePositionState()
+      if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'
+    }
     const onWait  = () => setLoading(true)
     const onCan   = () => setLoading(false)
     const onEnd   = () => {
@@ -282,6 +289,30 @@ export function PlayerProvider({ children }) {
   }, [applyVolume])
 
   useEffect(() => { if (volInputRef.current) volInputRef.current.value = String(Math.round(volume*100)) }, [volume])
+
+  // ── Page freeze/resume (bfcache, Android background) ────────────────────
+  useEffect(() => {
+    const onFreeze = () => {
+      // Browser is freezing the page — audio element survives if we don't pause it
+      // Do nothing — let audio keep playing
+      console.log('[audio] page freeze — keeping audio running')
+    }
+    const onResume = () => {
+      if (playingRef.current) {
+        audioEl.play().catch(() => {})
+      }
+    }
+    window.addEventListener('freeze',   onFreeze)
+    window.addEventListener('resume',   onResume)
+    // pagehide: fired when navigating away / backgrounding on some browsers
+    window.addEventListener('pagehide', () => {
+      // Do NOT pause — let it run
+    })
+    return () => {
+      window.removeEventListener('freeze', onFreeze)
+      window.removeEventListener('resume', onResume)
+    }
+  }, [])
 
   // ── Core play ─────────────────────────────────────────────────────────────
   const _play = useCallback(async (t, q, i) => {

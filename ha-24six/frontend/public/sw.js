@@ -1,4 +1,5 @@
-const CACHE = 'twentyfour-six-v1'
+// 24Six Service Worker — keeps app shell cached and audio fetch alive
+const CACHE = 'twentyfour-six-v3'
 const PRECACHE = ['./', './index.html']
 
 self.addEventListener('install', evt => {
@@ -16,6 +17,8 @@ self.addEventListener('activate', evt => {
 
 self.addEventListener('fetch', evt => {
   const url = new URL(evt.request.url)
+
+  // Never intercept API, WS, or audio stream calls
   if (url.pathname.includes('/api/') || url.pathname.includes('/ws/')) return
 
   if (evt.request.mode === 'navigate') {
@@ -38,6 +41,21 @@ self.addEventListener('fetch', evt => {
   )
 })
 
+// Keep SW alive with periodic pings from the page
 self.addEventListener('message', evt => {
   if (evt.data === 'ping') evt.source?.postMessage('pong')
+  // When SW gets a ping while page is backgrounded, do a no-op fetch
+  // to prevent the SW from being killed
+  if (evt.data === 'keepalive') {
+    evt.waitUntil(
+      self.clients.matchAll().then(() => {})
+    )
+  }
+})
+
+// Periodic background sync — keep SW alive even when page is backgrounded
+self.addEventListener('periodicsync', evt => {
+  if (evt.tag === 'keepalive') {
+    evt.waitUntil(Promise.resolve())
+  }
 })
