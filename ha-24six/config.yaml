@@ -1,6 +1,6 @@
 name: "24Six Music"
 description: "24Six Jewish Music Streaming for Home Assistant"
-version: "1.5.0"
+version: "1.5.01"
 slug: twentyfour_six
 url: "https://github.com/chanochsussman-lgtm/ha-addon-24six"
 
@@ -12,12 +12,12 @@ arch:
   - armv7
   - i386
 
-startup: services       # start early in HA boot sequence
-boot: auto              # start automatically on HA boot
-watchdog: "http://[HOST]:[PORT:8484]/api/setup/status"  # HA restarts add-on if this 404s/times out
+startup: services
+boot: auto
+watchdog: "http://[HOST]:[PORT:8484]/api/setup/status"
 
 ports:
-  8484/tcp: null        # internal only, served via ingress
+  8484/tcp: null
 ingress: true
 ingress_port: 8484
 panel_icon: mdi:music-circle
@@ -32,5 +32,3 @@ schema: {}
 
 map:
   - data
-
-image: "ghcr.io/chanochsussman-lgtm/ha-addon-24six/{arch}"
