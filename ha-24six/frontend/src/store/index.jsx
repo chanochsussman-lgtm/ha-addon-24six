@@ -35,6 +35,14 @@ export function PlayerProvider({ children }) {
   const haWs              = useRef(null)
   const volInputRef       = useRef(null)
 
+  const _haControl = (action, position) => {
+    const base = window.ingressPath || ''
+    fetch(`${base}/api/ha/control`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ entity_id:activeSpeakerRef.current, action, position })
+    }).catch(()=>{})
+  }
+
   useEffect(() => { queueRef.current         = queue   }, [queue])
   useEffect(() => { qIdxRef.current          = qIdx    }, [qIdx])
   useEffect(() => { volumeRef.current        = volume  }, [volume])
@@ -449,14 +457,6 @@ export function PlayerProvider({ children }) {
     const t = setInterval(_updatePositionState, 5000)
     return () => clearInterval(t)
   }, [_updatePositionState])
-
-  const _haControl = (action, position) => {
-    const base = window.ingressPath || ''
-    fetch(`${base}/api/ha/control`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ entity_id:activeSpeakerRef.current, action, position })
-    }).catch(()=>{})
-  }
 
   // ── Public API ───────────────────────────────────────────────────────────
   const playTrack  = useCallback((t,q=[],i=0) => _play(t, q.length?q:[t], i), [_play])
