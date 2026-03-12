@@ -70,6 +70,7 @@ export default function App() {
   if (!authed) return <Login onLogin={() => setAuthed(true)} />
   return (
     <>
+    <ErrorBoundary>
     <ReconnectBanner />
     <PlayerProvider>
       <div style={{ height:'100vh', display:'flex', flexDirection:'column', background:'var(--bg)', overflow:'hidden' }}>
