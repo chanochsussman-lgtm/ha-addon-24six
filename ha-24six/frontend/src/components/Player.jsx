@@ -48,20 +48,20 @@ function VolumeBar({ volume, muted, applyVolume, toggleMute, activeSpeakerName, 
           {/* Mute button */}
           <button onClick={toggleMute} style={{ background:'none', border:'none', cursor:'pointer', padding:4, display:'flex', alignItems:'center', opacity: muted ? 1 : 0.5 }}>
             {muted
-              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
-              : <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+              ? <svg width="16" height="16" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+              : <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
             }
           </button>
           {/* Speaker name — tappable, opens dock */}
           <button onClick={onOpenDock} style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 6px', borderRadius:6, display:'flex', alignItems:'center', gap:5,
             background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.08)' }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
-              <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+              <path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
             </svg>
             <span style={{ fontSize:10, color:'rgba(255,255,255,0.5)', textTransform:'uppercase', letterSpacing:0.8 }}>
               {muted ? 'MUTED — ' : ''}{activeSpeakerName}
             </span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)"><path d="M7 10l5 5 5-5z"/></svg>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)"><path resp_player="M7 10l5 5 5-5z"/></svg>
           </button>
         </div>
         <span style={{ fontSize:12, color: muted ? 'var(--muted)' : 'var(--accent)', fontWeight:700 }}>
@@ -88,7 +88,7 @@ function InlineSpeakerStrip() {
   useEffect(() => {
     fetch(`${base}/api/ha/speakers`)
       .then(r => r.json())
-      .then(d => setSpeakers(Array.isArray(d) ? d : d?.speakers || []))
+      .then(resp_player => setSpeakers(Array.isArray(resp_player) ? resp_player : resp_player?.speakers || []))
       .catch(() => {})
   }, [])
 
@@ -97,7 +97,7 @@ function InlineSpeakerStrip() {
     const t = setInterval(() => {
       fetch(`${base}/api/ha/speakers`)
         .then(r => r.json())
-        .then(d => setSpeakers(Array.isArray(d) ? d : d?.speakers || []))
+        .then(resp_player => setSpeakers(Array.isArray(resp_player) ? resp_player : resp_player?.speakers || []))
         .catch(() => {})
     }, 10000)
     return () => clearInterval(t)
@@ -161,8 +161,8 @@ function InlineSpeakerStrip() {
                   display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill={isActive ? 'var(--accent)' : 'rgba(255,255,255,0.4)'}>
                     {sp.entity_id === 'local'
-                      ? <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-                      : <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+                      ? <path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                      : <path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
                     }
                   </svg>
                 </div>
@@ -222,7 +222,7 @@ function SpeakerVolumeSlider({ entityId, initial, onChange }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:8 }}>
       <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.3)">
-        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+        <path resp_player="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
       </svg>
       <input type="range" min="0" max="100" value={val}
         onChange={e => handle(Number(e.target.value))}
@@ -266,15 +266,15 @@ function FullPlayer({ onClose }) {
         {/* Header */}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'16px 20px 8px', flexShrink:0 }}>
           <button onClick={onClose} style={{ background:'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path resp_player="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
           </button>
           <span style={{ fontSize:11, fontWeight:700, color:'rgba(255,255,255,0.5)', letterSpacing:1.8, textTransform:'uppercase' }}>Now Playing</span>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={() => setShowQueue(q => !q)} style={{ background: showQueue?'rgba(200,168,75,0.25)':'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="white"><path resp_player="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z"/></svg>
             </button>
             <button onClick={() => setShowCast(true)} style={{ background:'rgba(255,255,255,0.12)', borderRadius:'50%', width:38, height:38, display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer' }}>
-              <svg width="19" height="19" viewBox="0 0 24 24" fill="white"><path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 9c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="white"><path resp_player="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 9c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2c0-6.08-4.93-11-11-11z"/></svg>
             </button>
           </div>
         </div>
@@ -331,18 +331,18 @@ function FullPlayer({ onClose }) {
           {/* Playback buttons */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:0 }}>
             <button onClick={playPrev} style={{ flex:1, background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'center', padding:12 }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path resp_player="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
             </button>
             <button onClick={togglePlay} style={{ width:72, height:72, borderRadius:'50%', background:'var(--accent)', display:'flex', alignItems:'center', justifyContent:'center', border:'none', cursor:'pointer', boxShadow:'0 4px 28px rgba(200,168,75,0.55)', flexShrink:0 }}>
               {loading
                 ? <div style={{ width:24, height:24, border:'3px solid #000', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
                 : playing
-                  ? <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                  : <svg width="28" height="28" viewBox="0 0 24 24" fill="#000" style={{ marginLeft:3 }}><path d="M8 5v14l11-7z"/></svg>
+                  ? <svg width="28" height="28" viewBox="0 0 24 24" fill="#000"><path resp_player="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                  : <svg width="28" height="28" viewBox="0 0 24 24" fill="#000" style={{ marginLeft:3 }}><path resp_player="M8 5v14l11-7z"/></svg>
               }
             </button>
             <button onClick={() => playNext()} style={{ flex:1, background:'transparent', border:'none', cursor:'pointer', display:'flex', justifyContent:'center', padding:12 }}>
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="rgba(255,255,255,0.85)"><path resp_player="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
             </button>
           </div>
 
@@ -394,13 +394,13 @@ export default function Player() {
                 {loading
                   ? <div style={{ width:22, height:22, border:'2px solid var(--accent)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin 0.7s linear infinite' }} />
                   : playing
-                    ? <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-                    : <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path d="M8 5v14l11-7z"/></svg>
+                    ? <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    : <svg width="26" height="26" viewBox="0 0 24 24" fill="var(--accent)"><path resp_player="M8 5v14l11-7z"/></svg>
                 }
               </button>
               <button onClick={e => { e.stopPropagation(); playNext() }}
                 style={{ background:'transparent', border:'none', cursor:'pointer', padding:8, flexShrink:0, display:'flex', alignItems:'center' }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-secondary)"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--text-secondary)"><path resp_player="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
               </button>
             </>
           )}

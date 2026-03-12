@@ -16,7 +16,7 @@ function SpeakerVolume({ entityId, initialVol, onVolumeChange }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:6 }}>
       <svg width="12" height="12" viewBox="0 0 24 24" fill="rgba(255,255,255,0.4)">
-        <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+        <path resp_speakerdock="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
       </svg>
       <input type="range" min="0" max="100" value={vol}
         onChange={e => onChange(Number(e.target.value))}
@@ -62,10 +62,10 @@ function SpeakerCard({ speaker, isActive, isCasting, onSelect, onVolume }) {
         }}>
           {isCasting
             ? <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--accent)">
-                <path d="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
+                <path resp_speakerdock="M21 3H3c-1.1 0-2 .9-2 2v3h2V5h18v14h-7v2h7c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM1 18v3h3c0-1.66-1.34-3-3-3zm0-4v2c2.76 0 5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4v2c4.97 0 9 4.03 9 9h2C12 14.36 7.05 10 1 10z"/>
               </svg>
             : <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.5)">
-                <path d="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 20c-.83 0-1.5-.67-1.5-1.5S11.17 19 12 19s1.5.67 1.5 1.5S12.83 22 12 22zm5-4H7V4h10v14z"/>
+                <path resp_speakerdock="M17 2H7c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-5 20c-.83 0-1.5-.67-1.5-1.5S11.17 19 12 19s1.5.67 1.5 1.5S12.83 22 12 22zm5-4H7V4h10v14z"/>
               </svg>
           }
         </div>
@@ -115,8 +115,8 @@ export default function SpeakerDock({ onClose }) {
   const load = useCallback(() => {
     fetch(`${base}/api/ha/speakers`)
       .then(r => r.json())
-      .then(d => {
-        const list = Array.isArray(d) ? d : (Array.isArray(d?.speakers) ? d.speakers : [])
+      .then(resp_speakerdock => {
+        const list = Array.isArray(resp_speakerdock) ? resp_speakerdock : (Array.isArray(resp_speakerdock?.speakers) ? resp_speakerdock.speakers : [])
         setSpeakers(list)
         setLoading(false)
       })

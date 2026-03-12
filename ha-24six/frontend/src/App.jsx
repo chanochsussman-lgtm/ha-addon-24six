@@ -65,7 +65,7 @@ function ReconnectBanner() {
 export default function App() {
   const [authed, setAuthed] = useState(null)
   useEffect(() => {
-    api.status().then(d => setAuthed(d.authenticated)).catch(() => setAuthed(false))
+    api.status().then(resp_app => setAuthed(resp_app.authenticated)).catch(() => setAuthed(false))
   }, [])
   if (authed === null) return <Splash />
   if (!authed) return <Login onLogin={() => setAuthed(true)} />

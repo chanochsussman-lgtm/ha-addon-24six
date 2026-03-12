@@ -12,17 +12,17 @@ export default function CategoryPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.category(id).catch(() => null).then(d => {
-      if (!d) { setLoading(false); return }
-      console.log('[Category] keys:', Object.keys(d))
+    api.category(id).catch(() => null).then(resp_categorypage => {
+      if (!resp_categorypage) { setLoading(false); return }
+      console.log('[Category] keys:', Object.keys(resp_categorypage))
 
       // Title from category metadata
-      const cat = d.category || d
+      const cat = resp_categorypage.category || resp_categorypage
       setTitle(cat.title || cat.name || 'Category')
 
       // Build sections from all array keys
       const secs = []
-      Object.entries(d).forEach(([k, v]) => {
+      Object.entries(resp_categorypage).forEach(([k, v]) => {
         if (!Array.isArray(v) || !v.length || !v[0]?.id) return
         if (k === 'category') return
         const sample = v[0]
