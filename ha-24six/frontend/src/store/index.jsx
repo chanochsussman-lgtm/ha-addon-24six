@@ -2,11 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 const Ctx = createContext(null)
 
-// ── Singleton audio element ──────────────────────────────────────────────────
-// NO Web Audio API GainNode — it silences audio on many browsers/devices.
-// Volume is controlled directly via audio.volume. Mute via a separate flag.
 const audio = new Audio()
 audio.preload = 'auto'
+audio.setAttribute('playsinline', '')
 
 export function PlayerProvider({ children }) {
   const [track,             setTrack]             = useState(null)
@@ -21,37 +19,36 @@ export function PlayerProvider({ children }) {
   const [activeSpeaker,     setActiveSpeaker]     = useState('local')
   const [activeSpeakerName, setActiveSpeakerName] = useState('This Device')
 
-  const queueRef          = useRef([])
-  const qIdxRef           = useRef(0)
-  const _playRef          = useRef(null)
-  const volumeRef         = useRef(1.0)
-  const mutedRef          = useRef(false)
-  const playingRef        = useRef(false)          // ← was missing, caused silent audio
-  const activeSpeakerRef  = useRef('local')
-  const trackRef          = useRef(null)
-  const progressRef       = useRef(0)
-  const durationRef       = useRef(0)
-  const volDebounce       = useRef(null)
-  const haWs              = useRef(null)
-  const volInputRef       = useRef(null)
+  // Refs — always safe to read/write from any closure
+  const queueRef         = useRef([])
+  const qIdxRef          = useRef(0)
+  const playingRef       = useRef(false)
+  const volumeRef        = useRef(1.0)
+  const mutedRef         = useRef(false)
+  const activeSpeakerRef = useRef('local')
+  const trackRef         = useRef(null)
+  const progressRef      = useRef(0)
+  const durationRef      = useRef(0)
+  const volDebounce      = useRef(null)
+  const haWs             = useRef(null)
+  const volInputRef      = useRef(null)
 
-  const _haControl = (action, position) => {
-    const base = window.ingressPath || ''
-    fetch(`${base}/api/ha/control`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ entity_id:activeSpeakerRef.current, action, position })
-    }).catch(()=>{})
-  }
+  // Indirection refs — lets useEffects call functions declared later
+  const _playRef               = useRef(null)
+  const _haControlRef          = useRef(null)
+  const _updatePositionRef     = useRef(null)
+  const _pushPlayerStateRef    = useRef(null)
 
-  useEffect(() => { queueRef.current         = queue   }, [queue])
-  useEffect(() => { qIdxRef.current          = qIdx    }, [qIdx])
-  useEffect(() => { volumeRef.current        = volume  }, [volume])
-  useEffect(() => { mutedRef.current         = muted   }, [muted])
-  useEffect(() => { playingRef.current       = playing }, [playing])   // ← keep in sync
-  useEffect(() => { activeSpeakerRef.current = activeSpeaker }, [activeSpeaker])
-  useEffect(() => { trackRef.current         = track   }, [track])
-  useEffect(() => { progressRef.current      = progress }, [progress])
-  useEffect(() => { durationRef.current      = duration }, [duration])
+  // Keep state refs in sync
+  useEffect(() => { queueRef.current         = queue        }, [queue])
+  useEffect(() => { qIdxRef.current          = qIdx         }, [qIdx])
+  useEffect(() => { volumeRef.current        = volume       }, [volume])
+  useEffect(() => { mutedRef.current         = muted        }, [muted])
+  useEffect(() => { playingRef.current       = playing      }, [playing])
+  useEffect(() => { activeSpeakerRef.current = activeSpeaker}, [activeSpeaker])
+  useEffect(() => { trackRef.current         = track        }, [track])
+  useEffect(() => { progressRef.current      = progress     }, [progress])
+  useEffect(() => { durationRef.current      = duration     }, [duration])
 
   // ── Audio events ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -71,10 +68,8 @@ export function PlayerProvider({ children }) {
     const onEnd   = () => {
       const q=queueRef.current, i=qIdxRef.current
       if (i < q.length-1) {
-        // More tracks in current queue — just play next
         _playRef.current?.(q[i+1], q, i+1)
       } else {
-        // End of queue — try to continue from artist
         const t = trackRef.current
         const artistId = t?.artistId || t?.artist_id
         if (!artistId) return
@@ -82,48 +77,26 @@ export function PlayerProvider({ children }) {
         fetch(`${base}/api/artists/${artistId}`)
           .then(r => r.json())
           .then(artistData => {
-            const topSongs = Array.isArray(artistData.top_songs) ? artistData.top_songs : []
-            const albums   = Array.isArray(artistData.albums)    ? artistData.albums    : []
+            const topSongs   = Array.isArray(artistData.top_songs) ? artistData.top_songs : []
+            const albums     = Array.isArray(artistData.albums)    ? artistData.albums    : []
             const artistImg  = artistData.artist?.img  || artistData.img  || t.img
             const artistName = artistData.artist?.name || artistData.name || t.artist
             const nextTracks = topSongs
-              .filter(s => s.id !== t.id)  // skip the one we just played
-              .map(s => ({
-                id:     s.id,
-                title:  s.title || s.name || '',
-                artist: s.artists?.map(a=>a.name).join(', ') || artistName,
-                img:    s.img || artistImg,
-                artistId: s.artist_id || artistId,
-                collectionId: s.collection_id || s.collectionId || null,
-              }))
-
+              .filter(s => s.id !== t.id)
+              .map(s => ({ id:s.id, title:s.title||s.name||'', artist:s.artists?.map(a=>a.name).join(', ')||artistName, img:s.img||artistImg, artistId:s.artist_id||artistId, collectionId:s.collection_id||null }))
             if (nextTracks.length > 0) {
-              console.log(`[autoqueue] continuing with ${nextTracks.length} more tracks from artist ${artistId}`)
               _playRef.current?.(nextTracks[0], nextTracks, 0)
             } else if (albums.length > 0) {
-              // No top_songs — load first album's tracks
-              const nextAlbum = albums.find(a => a.id !== (t.collectionId)) || albums[0]
+              const nextAlbum = albums.find(a => a.id !== t.collectionId) || albums[0]
               fetch(`${base}/api/collections/${nextAlbum.id}`)
                 .then(r => r.json())
                 .then(albumData => {
                   const songs = Array.isArray(albumData.collection?.contents) ? albumData.collection.contents : []
-                  const albumTracks = songs.map(s => ({
-                    id:     s.id,
-                    title:  s.title || s.name || '',
-                    artist: s.artists?.map(a=>a.name).join(', ') || artistName,
-                    img:    s.img || albumData.collection?.img || artistImg,
-                    artistId: artistId,
-                    collectionId: nextAlbum.id,
-                  }))
-                  if (albumTracks.length > 0) {
-                    console.log(`[autoqueue] continuing with album ${nextAlbum.id} (${albumTracks.length} tracks)`)
-                    _playRef.current?.(albumTracks[0], albumTracks, 0)
-                  }
-                })
-                .catch(() => {})
+                  const tracks = songs.map(s => ({ id:s.id, title:s.title||s.name||'', artist:s.artists?.map(a=>a.name).join(', ')||artistName, img:s.img||albumData.collection?.img||artistImg, artistId, collectionId:nextAlbum.id }))
+                  if (tracks.length > 0) _playRef.current?.(tracks[0], tracks, 0)
+                }).catch(() => {})
             }
-          })
-          .catch(() => {})
+          }).catch(() => {})
       }
     }
     audio.addEventListener('timeupdate',     onTime)
@@ -144,22 +117,12 @@ export function PlayerProvider({ children }) {
     }
   }, [])
 
-  // ── Keep audio alive when tab is hidden / screen locked ─────────────────
+  // ── Tab visibility — resume audio ────────────────────────────────────────
   useEffect(() => {
-    const resume = async () => {
-      if (playingRef.current && audio.paused && audio.src) {
-        try { await audio.play() } catch {}
-      }
-    }
-    const onVisible  = () => { if (document.visibilityState === 'visible') resume() }
-    const onResume   = () => resume()
-    document.addEventListener('visibilitychange', onVisible)
-    document.addEventListener('resume',           onResume)
-    // Don't auto-resume on every pause — only on visibility / resume events
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      document.removeEventListener('resume',           onResume)
-    }
+    const resume = () => { if (playingRef.current && audio.paused && audio.src) audio.play().catch(()=>{}) }
+    const onVis  = () => { if (document.visibilityState === 'visible') resume() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
   }, [])
 
   // ── MediaSession position state ──────────────────────────────────────────
@@ -167,33 +130,24 @@ export function PlayerProvider({ children }) {
     if (!('mediaSession' in navigator)) return
     try {
       if (durationRef.current > 0) {
-        navigator.mediaSession.setPositionState({
-          duration:     durationRef.current,
-          playbackRate: 1,
-          position:     Math.min(progressRef.current, durationRef.current),
-        })
+        navigator.mediaSession.setPositionState({ duration:durationRef.current, playbackRate:1, position:Math.min(progressRef.current, durationRef.current) })
       }
     } catch {}
   }, [])
+  useEffect(() => { _updatePositionRef.current = _updatePositionState }, [_updatePositionState])
 
   // ── MediaSession metadata ────────────────────────────────────────────────
   const _pushMetadata = useCallback((t) => {
     if (!('mediaSession' in navigator) || !t) return
     const imgUrl = t.img ? `${window.ingressPath||''}/api/img?url=${encodeURIComponent(t.img)}` : null
     navigator.mediaSession.metadata = new MediaMetadata({
-      title:   t.title  || '',
-      artist:  t.artist || '',
-      album:   t.album  || '',
-      artwork: imgUrl ? [
-        { src:imgUrl, sizes:'96x96',   type:'image/jpeg' },
-        { src:imgUrl, sizes:'256x256', type:'image/jpeg' },
-        { src:imgUrl, sizes:'512x512', type:'image/jpeg' },
-      ] : [],
+      title: t.title||'', artist: t.artist||'', album: t.album||'',
+      artwork: imgUrl ? [{ src:imgUrl, sizes:'512x512', type:'image/jpeg' }] : [],
     })
     navigator.mediaSession.playbackState = 'playing'
   }, [])
 
-  // ── Push cast metadata to HA speaker ────────────────────────────────────
+  // ── Push cast metadata ───────────────────────────────────────────────────
   const _pushCastMetadata = useCallback(async (t, entity_id) => {
     if (!entity_id || entity_id === 'local' || !t) return
     const base = window.ingressPath || ''
@@ -205,13 +159,13 @@ export function PlayerProvider({ children }) {
     } catch {}
   }, [])
 
-  // ── HA WebSocket (real-time speaker state) ───────────────────────────────
+  // ── HA speaker poller ────────────────────────────────────────────────────
   const _startHAPoller = useCallback((entity_id) => {
     if (haWs.current) { haWs.current.onclose=null; haWs.current.close(); haWs.current=null }
     if (!entity_id || entity_id === 'local') return
-    const base    = window.ingressPath || ''
-    const proto   = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const url     = `${proto}://${window.location.host}${base}/ws/player`
+    const base  = window.ingressPath || ''
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const url   = `${proto}://${window.location.host}${base}/ws/player`
     const connect = () => {
       const ws = new WebSocket(url)
       haWs.current = ws
@@ -224,15 +178,15 @@ export function PlayerProvider({ children }) {
         if (state === 'playing') { setPlaying(true); playingRef.current=true }
         else if (state === 'paused' || state === 'idle') { setPlaying(false); playingRef.current=false }
         if (position != null && Math.abs(position - progressRef.current) > 3) {
-          setProgress(position); progressRef.current = position; _updatePositionState()
+          setProgress(position); progressRef.current=position; _updatePositionRef.current?.()
         }
         if (vol != null && Math.abs(vol - volumeRef.current) > 0.02) {
-          setVolume(vol); volumeRef.current = vol; audio.volume = mutedRef.current ? 0 : vol
+          setVolume(vol); volumeRef.current=vol; audio.volume = mutedRef.current ? 0 : vol
         }
       }
     }
     connect()
-  }, [_updatePositionState])
+  }, [])
 
   const _stopHAPoller = useCallback(() => {
     if (haWs.current) { haWs.current.onclose=null; haWs.current.close(); haWs.current=null }
@@ -241,46 +195,34 @@ export function PlayerProvider({ children }) {
   // ── Volume ───────────────────────────────────────────────────────────────
   const applyVolume = useCallback((v) => {
     const clamped = Math.max(0, Math.min(1, v))
-    setVolume(clamped)
-    volumeRef.current = clamped
+    setVolume(clamped); volumeRef.current = clamped
     if (activeSpeakerRef.current === 'local') {
       audio.volume = mutedRef.current ? 0 : clamped
     } else {
       clearTimeout(volDebounce.current)
       volDebounce.current = setTimeout(() => {
         const base = window.ingressPath || ''
-        fetch(`${base}/api/ha/volume`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ entity_id: activeSpeakerRef.current, volume: clamped })
-        }).catch(()=>{})
+        fetch(`${base}/api/ha/volume`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ entity_id:activeSpeakerRef.current, volume:clamped }) }).catch(()=>{})
       }, 80)
     }
   }, [])
 
-  // Mute toggle — does NOT change volume slider position
   const toggleMute = useCallback(() => {
-    const newMuted = !mutedRef.current
-    setMuted(newMuted)
-    mutedRef.current = newMuted
-    if (activeSpeakerRef.current === 'local') {
-      audio.volume = newMuted ? 0 : volumeRef.current
-    }
+    const nm = !mutedRef.current
+    setMuted(nm); mutedRef.current=nm
+    if (activeSpeakerRef.current === 'local') audio.volume = nm ? 0 : volumeRef.current
   }, [])
 
-  // Sync OS volume changes back to slider
   useEffect(() => {
     const onVC = () => {
       if (activeSpeakerRef.current !== 'local' || mutedRef.current) return
       const v = audio.volume
-      if (Math.abs(v - volumeRef.current) > 0.01) {
-        setVolume(v); volumeRef.current = v
-      }
+      if (Math.abs(v - volumeRef.current) > 0.01) { setVolume(v); volumeRef.current=v }
     }
     audio.addEventListener('volumechange', onVC)
     return () => audio.removeEventListener('volumechange', onVC)
   }, [])
 
-  // Hardware volume keys
   useEffect(() => {
     const onKey = (e) => {
       if (e.key==='AudioVolumeUp'||e.code==='AudioVolumeUp')     { e.preventDefault(); applyVolume(volumeRef.current+0.05) }
@@ -290,105 +232,53 @@ export function PlayerProvider({ children }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [applyVolume])
 
-  useEffect(() => { if (volInputRef.current) volInputRef.current.value = String(Math.round(volume*100)) }, [volume])
-
-  // ── Page freeze/resume (bfcache, Android background) ────────────────────
-  useEffect(() => {
-    const onFreeze = () => {
-      // Browser is freezing the page — audio element survives if we don't pause it
-      // Do nothing — let audio keep playing
-      console.log('[audio] page freeze — keeping audio running')
-    }
-    const onResume = () => {
-      if (playingRef.current) {
-        audio.play().catch(() => {})
-      }
-    }
-    window.addEventListener('freeze',   onFreeze)
-    window.addEventListener('resume',   onResume)
-    // pagehide: fired when navigating away / backgrounding on some browsers
-    window.addEventListener('pagehide', () => {
-      // Do NOT pause — let it run
-    })
-    return () => {
-      window.removeEventListener('freeze', onFreeze)
-      window.removeEventListener('resume', onResume)
-    }
+  // ── HA control ───────────────────────────────────────────────────────────
+  const _haControl = useCallback((action, position) => {
+    const base = window.ingressPath || ''
+    fetch(`${base}/api/ha/control`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ entity_id:activeSpeakerRef.current, action, position }) }).catch(()=>{})
   }, [])
+  useEffect(() => { _haControlRef.current = _haControl }, [_haControl])
 
   // ── Core play ─────────────────────────────────────────────────────────────
   const _play = useCallback(async (t, q, i) => {
     setTrack(t); setQueue(q); setQIdx(i)
-    queueRef.current=q; qIdxRef.current=i
-    trackRef.current=t
+    queueRef.current=q; qIdxRef.current=i; trackRef.current=t
     setLoading(true); setProgress(0); setDuration(0)
-
-    // Stay on current speaker — don't reset to local
     _pushMetadata(t)
-
-    // Record to recent plays (fire-and-forget)
     const base = window.ingressPath || ''
-    fetch(`${base}/api/browse/record-play`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ id:t.id, title:t.title, artist:t.artist, img:t.img })
-    }).catch(()=>{})
-
+    fetch(`${base}/api/browse/record-play`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ id:t.id, title:t.title, artist:t.artist, img:t.img }) }).catch(()=>{})
     if (activeSpeakerRef.current !== 'local') {
-      // Cast to HA speaker
       try {
-        const r = await fetch(`${base}/api/ha/play`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ entity_id:activeSpeakerRef.current, track_id:t.id, track_title:t.title })
-        })
+        const r = await fetch(`${base}/api/ha/play`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ entity_id:activeSpeakerRef.current, track_id:t.id, track_title:t.title }) })
         const castResp = await r.json()
-        if (castResp.ok) {
-          setPlaying(true); playingRef.current=true; setLoading(false)
-          await _pushCastMetadata(t, activeSpeakerRef.current)
-        }
-      } catch (e) { console.error('[cast] error:', e.message); setLoading(false) }
+        if (castResp.ok) { setPlaying(true); playingRef.current=true; setLoading(false); await _pushCastMetadata(t, activeSpeakerRef.current) }
+      } catch (e) { console.error('[cast]', e.message); setLoading(false) }
       return
     }
-
     try {
       const res  = await fetch(`${base}/api/audio/${t.id}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       const url  = typeof data === 'string' ? data : data?.url
-      if (!url) throw new Error('No URL: ' + JSON.stringify(data))
-      console.log('[play]', t.title, url.slice(0,60))
+      if (!url) throw new Error('No URL')
       audio.volume = mutedRef.current ? 0 : volumeRef.current
-      audio.src    = url
-      audio.load()
-      await audio.play()
-    } catch (e) {
-      console.error('[play] error:', e.message)
-      setLoading(false)
-    }
+      audio.src = url; audio.load(); await audio.play()
+    } catch (e) { console.error('[play]', e.message); setLoading(false) }
   }, [_pushMetadata, _pushCastMetadata])
-
   useEffect(() => { _playRef.current = _play }, [_play])
 
-  // ── Push state to server for Lovelace card ───────────────────────────────
+  // ── Push state to Lovelace card ──────────────────────────────────────────
   const _pushPlayerState = useCallback((overrides={}) => {
     const t = trackRef.current; if (!t) return
     const base = window.ingressPath || ''
-    fetch(`${base}/api/player/update`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        title:    t.title   || '',
-        artist:   t.artist  || '',
-        img:      t.img     || '',
-        playing:  overrides.playing  ?? !audio.paused,
-        progress: overrides.progress ?? audio.currentTime,
-        duration: overrides.duration ?? (isNaN(audio.duration)?0:audio.duration),
-      })
-    }).catch(()=>{})
+    fetch(`${base}/api/player/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ title:t.title||'', artist:t.artist||'', img:t.img||'', playing:overrides.playing??!audio.paused, progress:overrides.progress??audio.currentTime, duration:overrides.duration??(isNaN(audio.duration)?0:audio.duration) }) }).catch(()=>{})
   }, [])
+  useEffect(() => { _pushPlayerStateRef.current = _pushPlayerState }, [_pushPlayerState])
 
   useEffect(() => {
-    const onPlay  = () => _pushPlayerState({ playing:true })
-    const onPause = () => _pushPlayerState({ playing:false })
-    const onDur   = () => _pushPlayerState()
+    const onPlay  = () => _pushPlayerStateRef.current?.({ playing:true })
+    const onPause = () => _pushPlayerStateRef.current?.({ playing:false })
+    const onDur   = () => _pushPlayerStateRef.current?.()
     audio.addEventListener('play',           onPlay)
     audio.addEventListener('pause',          onPause)
     audio.addEventListener('durationchange', onDur)
@@ -397,18 +287,18 @@ export function PlayerProvider({ children }) {
       audio.removeEventListener('pause',          onPause)
       audio.removeEventListener('durationchange', onDur)
     }
-  }, [_pushPlayerState])
+  }, [])
 
   useEffect(() => {
-    const t = setInterval(() => { if (!audio.paused) _pushPlayerState() }, 5000)
+    const t = setInterval(() => { if (!audio.paused) _pushPlayerStateRef.current?.() }, 5000)
     return () => clearInterval(t)
-  }, [_pushPlayerState])
+  }, [])
 
   // ── Card control WS ──────────────────────────────────────────────────────
   useEffect(() => {
-    const base    = window.ingressPath || ''
-    const proto   = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const url     = `${proto}://${window.location.host}${base}/ws/player`
+    const base  = window.ingressPath || ''
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const url   = `${proto}://${window.location.host}${base}/ws/player`
     let ws, timer
     const connect = () => {
       ws = new WebSocket(url)
@@ -419,7 +309,7 @@ export function PlayerProvider({ children }) {
         if (msg.action==='play')  audio.play().catch(()=>{})
         if (msg.action==='pause') audio.pause()
         if (msg.action==='next' && i<q.length-1) _playRef.current?.(q[i+1],q,i+1)
-        if (msg.action==='prev' && i>0) _playRef.current?.(q[i-1],q,i-1)
+        if (msg.action==='prev' && i>0)          _playRef.current?.(q[i-1],q,i-1)
       }
       ws.onclose = () => { timer = setTimeout(connect, 3000) }
       ws.onerror = () => {}
@@ -428,35 +318,26 @@ export function PlayerProvider({ children }) {
     return () => { ws?.close(); clearTimeout(timer) }
   }, [])
 
-  // ── MediaSession action handlers ─────────────────────────────────────────
+  // ── MediaSession actions ─────────────────────────────────────────────────
   useEffect(() => {
     if (!('mediaSession' in navigator)) return
-    const doPlay  = () => { if(activeSpeakerRef.current==='local') audio.play(); else _haControl('play') }
-    const doPause = () => { if(activeSpeakerRef.current==='local') audio.pause(); else _haControl('pause') }
-    const doNext  = () => { const q=queueRef.current,i=qIdxRef.current; if(i<q.length-1) _playRef.current?.(q[i+1],q,i+1) }
-    const doPrev  = () => {
-      if(audio.currentTime>3&&activeSpeakerRef.current==='local'){audio.currentTime=0;return}
-      const q=queueRef.current,i=qIdxRef.current; if(i>0) _playRef.current?.(q[i-1],q,i-1)
-    }
-    const doSeek  = ({seekTime}) => {
-      if(activeSpeakerRef.current==='local') audio.currentTime=seekTime
-      else _haControl('seek', seekTime)
-      setProgress(seekTime); progressRef.current=seekTime; _updatePositionState()
-    }
-    navigator.mediaSession.setActionHandler('play',          doPlay)
-    navigator.mediaSession.setActionHandler('pause',         doPause)
-    navigator.mediaSession.setActionHandler('stop',          doPause)
-    navigator.mediaSession.setActionHandler('nexttrack',     doNext)
-    navigator.mediaSession.setActionHandler('previoustrack', doPrev)
-    navigator.mediaSession.setActionHandler('seekto',        doSeek)
-    navigator.mediaSession.setActionHandler('seekforward',   ()=>doSeek({seekTime:Math.min(progressRef.current+15,durationRef.current)}))
-    navigator.mediaSession.setActionHandler('seekbackward',  ()=>doSeek({seekTime:Math.max(progressRef.current-15,0)}))
-  }, [_updatePositionState])
+    navigator.mediaSession.setActionHandler('play',          () => { if(activeSpeakerRef.current==='local') audio.play(); else _haControlRef.current?.('play') })
+    navigator.mediaSession.setActionHandler('pause',         () => { if(activeSpeakerRef.current==='local') audio.pause(); else _haControlRef.current?.('pause') })
+    navigator.mediaSession.setActionHandler('stop',          () => { if(activeSpeakerRef.current==='local') audio.pause(); else _haControlRef.current?.('pause') })
+    navigator.mediaSession.setActionHandler('nexttrack',     () => { const q=queueRef.current,i=qIdxRef.current; if(i<q.length-1) _playRef.current?.(q[i+1],q,i+1) })
+    navigator.mediaSession.setActionHandler('previoustrack', () => { const q=queueRef.current,i=qIdxRef.current; if(i>0) _playRef.current?.(q[i-1],q,i-1) })
+    navigator.mediaSession.setActionHandler('seekto',        ({seekTime}) => {
+      if(activeSpeakerRef.current==='local') audio.currentTime=seekTime; else _haControlRef.current?.('seek', seekTime)
+      setProgress(seekTime); progressRef.current=seekTime; _updatePositionRef.current?.()
+    })
+    navigator.mediaSession.setActionHandler('seekforward',  () => { const t=Math.min(progressRef.current+15,durationRef.current); audio.currentTime=t; _updatePositionRef.current?.() })
+    navigator.mediaSession.setActionHandler('seekbackward', () => { const t=Math.max(progressRef.current-15,0);                   audio.currentTime=t; _updatePositionRef.current?.() })
+  }, [])
 
   useEffect(() => {
-    const t = setInterval(_updatePositionState, 5000)
+    const t = setInterval(() => _updatePositionRef.current?.(), 5000)
     return () => clearInterval(t)
-  }, [_updatePositionState])
+  }, [])
 
   // ── Public API ───────────────────────────────────────────────────────────
   const playTrack  = useCallback((t,q=[],i=0) => _play(t, q.length?q:[t], i), [_play])
@@ -465,42 +346,40 @@ export function PlayerProvider({ children }) {
     if (activeSpeakerRef.current === 'local') {
       audio.paused ? audio.play() : audio.pause()
     } else {
-      _haControl(playing ? 'pause' : 'play')
+      _haControlRef.current?.(playingRef.current ? 'pause' : 'play')
       setPlaying(p => !p); playingRef.current = !playingRef.current
     }
-  }, [playing])
+  }, [])
 
   const seek = useCallback((s) => {
     if (activeSpeakerRef.current === 'local') audio.currentTime = s
-    else { _haControl('seek', s); setProgress(s); progressRef.current=s; _updatePositionState() }
-  }, [_updatePositionState])
+    else { _haControlRef.current?.('seek', s); setProgress(s); progressRef.current=s; _updatePositionRef.current?.() }
+  }, [])
 
   const playNext = useCallback((songToInsert) => {
     if (songToInsert) {
       setQueue(q => { const n=[...q]; n.splice(qIdxRef.current+1,0,songToInsert); queueRef.current=n; return n })
     } else {
-      const q=queueRef.current,i=qIdxRef.current
+      const q=queueRef.current, i=qIdxRef.current
       if (i<q.length-1) _play(q[i+1],q,i+1)
     }
   }, [_play])
 
   const playPrev = useCallback(() => {
-    if (audio.currentTime>3 && activeSpeakerRef.current==='local') { seek(0); return }
-    const q=queueRef.current,i=qIdxRef.current
+    if (audio.currentTime>3 && activeSpeakerRef.current==='local') { audio.currentTime=0; return }
+    const q=queueRef.current, i=qIdxRef.current
     if (i>0) _play(q[i-1],q,i-1)
-  }, [_play, seek])
+  }, [_play])
 
   const addToQueue = useCallback((song) => {
     setQueue(q => { const n=[...q,song]; queueRef.current=n; return n })
   }, [])
 
   const setCastTarget = useCallback(async (entity_id, name) => {
-    const t = trackRef.current
-    setActiveSpeaker(entity_id||'local')
-    activeSpeakerRef.current = entity_id||'local'
+    setActiveSpeaker(entity_id||'local'); activeSpeakerRef.current=entity_id||'local'
     setActiveSpeakerName(name||'This Device')
     if (entity_id && entity_id !== 'local') {
-      await _pushCastMetadata(t, entity_id)
+      await _pushCastMetadata(trackRef.current, entity_id)
       applyVolume(volumeRef.current)
       _startHAPoller(entity_id)
     } else {
@@ -508,7 +387,6 @@ export function PlayerProvider({ children }) {
     }
   }, [_pushCastMetadata, applyVolume, _startHAPoller, _stopHAPoller])
 
-  // Hidden input for Android hw volume capture
   const HiddenVolumeInput = (
     <input ref={volInputRef} type="range" min="0" max="100" step="5" defaultValue="100"
       onChange={e => applyVolume(parseInt(e.target.value)/100)}
