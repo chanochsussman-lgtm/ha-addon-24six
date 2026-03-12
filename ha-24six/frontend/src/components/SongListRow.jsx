@@ -9,6 +9,17 @@ export function SongListRow({ song, queue, queueIndex, isActive }) {
   const { playTrack } = usePlayer()
   const [menu, setMenu] = useState(false)
   const [faved, setFaved] = useState(false)
+  const holdTimer = useRef(null)
+  const moved = useRef(false)
+
+  const onPointerDown = (e) => {
+    if (e.button === 2) return
+    moved.current = false
+    holdTimer.current = setTimeout(() => { if (!moved.current) setMenu(true) }, 500)
+  }
+  const onPointerMove   = () => { moved.current = true; clearTimeout(holdTimer.current) }
+  const onPointerUp     = () => clearTimeout(holdTimer.current)
+  const onContextMenu   = (e) => { e.preventDefault(); clearTimeout(holdTimer.current); setMenu(true) }
 
   const toT = s => ({
     id:     s.id,
@@ -34,7 +45,9 @@ export function SongListRow({ song, queue, queueIndex, isActive }) {
     <>
       <div className="tappable"
         onClick={() => playTrack(t, queue.map(toT), queueIndex)}
-        {...longPress}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
+        onContextMenu={onContextMenu}
         style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom:'1px solid rgba(255,255,255,0.05)', background: isActive ? 'rgba(200,168,75,0.08)' : 'transparent', userSelect:'none' }}>
         {/* Artwork */}
         <div style={{ width:46, height:46, borderRadius:7, overflow:'hidden', background:'var(--card)', flexShrink:0 }}>

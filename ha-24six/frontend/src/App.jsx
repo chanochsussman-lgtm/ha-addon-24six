@@ -1,3 +1,4 @@
+import ErrorBoundary from './components/ErrorBoundary'
 import React, { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import { PlayerProvider } from './store/index.jsx'
@@ -89,6 +90,7 @@ export default function App() {
         </div>
       </div>
     </PlayerProvider>
+    </ErrorBoundary>
     </>
   )
 }
